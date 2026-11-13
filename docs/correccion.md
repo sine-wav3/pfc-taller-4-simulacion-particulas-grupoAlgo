@@ -1,279 +1,281 @@
-# Ejemplo de informe de corrección
+# Informe de corrección
 
-Fundamentos de Programación Funcional y Concurrente.
-Documento realizado por el docente Juan Francisco Díaz.
+## Punto 3: las magnitudes globales en paralelo
 
-## 1. Argumentar la corrección de programas recursivos
+### Especificación
 
-Sea $f : A \to B$ una función, y $A$ un conjunto definido recursivamente
-(recordar la definición de Matemáticas Discretas I), como por ejemplo los
-naturales o las listas.
-
-Sea $P_f$ un programa recursivo (lineal o en árbol) desarrollado en Scala (o en
-cualquier lenguaje de programación) hecho para calcular $f$:
-
-```scala
-def Pf(a: A): B = { // Pf recibe a de tipo A, y devuelve f(a) de tipo B
-  ...
-}
-```
-
-¿Cómo argumentar que $P_f(a)$ siempre devuelve $f(a)$ como respuesta? Es decir,
-¿cómo argumentar que $P_f$ es correcto con respecto a su especificación?
-
-La respuesta es sencilla: demostrando el siguiente teorema.
+Sea $s = (p_0, p_1, \ldots, p_{n-1})$ un sistema, con $p_i$ de masa $m_i$,
+posición $x_i \in \mathbb{R}^2$ y velocidad $v_i \in \mathbb{R}^2$. Para un
+tramo $[d, h)$, con $0 \le d \le h \le n$, se definen:
 
 ```math
-\forall a \in A : P_f(a) == f(a)
+e_i = \tfrac{1}{2}\, m_i \, \lVert v_i \rVert^2
+\qquad
+E[d, h) = \sum_{i=d}^{h-1} e_i
+\qquad
+S[d, h) = \sum_{i=d}^{h-1} m_i\, x_i
+\qquad
+M[d, h) = \sum_{i=d}^{h-1} m_i
 ```
 
-Cuando uno tiene que demostrar que algo se cumple para todos los elementos de
-un conjunto definido recursivamente, es natural usar inducción estructural. En
-términos prácticos, esto significa demostrar que:
-
-- Para cada valor básico $a$ de $A$, se tiene que $P_f(a) == f(a)$.
-- Para cada valor $a \in A$ construido recursivamente a partir de otro(s)
-  valor(es) $a' \in A$, se tiene que
-  $P_f(a') == f(a') \rightarrow P_f(a) == f(a)$. (Esta es la hipótesis de
-  inducción).
-
-### Ejemplo: factorial recursivo
-
-Sea $f : \mathbb{N} \to \mathbb{N}$ la función que calcula el factorial de un
-número natural, es decir, $f(n) = n!$. Y sea $P_f$ el siguiente programa en
-Scala:
-
-```scala
-def Pf(n: Int): Int = { // Pf recibe n de tipo Int, y devuelve n! de tipo Int
-  if (n == 0) 1 else n * Pf(n - 1)
-}
-```
-
-Vamos a demostrar que $\forall n \in \mathbb{N} : P_f(n) == n!$
-
-**Caso base:** $n = 0$
+Lo que piden las funciones es:
 
 ```math
-P_f(0) \rightarrow \text{if } (0 == 0)\ 1 \text{ else } 0 \ast P_f(-1) \rightarrow 1
+\text{energía}(s) = E[0, n)
+\qquad
+\text{CM}(s) =
+\begin{cases}
+\dfrac{S[0, n)}{M[0, n)} & \text{si } M[0, n) \neq 0 \\[2mm]
+(0, 0) & \text{si } M[0, n) = 0
+\end{cases}
 ```
 
-Por otro lado, $f(0) = 0! = 1$. Entonces $P_f(0) == f(0)$.
+En los dos programas, $c = \max(\text{umbral}, 1) \ge 1$.
 
-**Caso de inducción:** $n = k + 1$, $k \geq 0$. Hay que demostrar:
-$P_f(k) == f(k) \rightarrow P_f(k + 1) == f(k + 1)$
+### Lema 1: el tramo secuencial
+
+`energiaTramo(d, h)` es un proceso iterativo:
+
+- Estado $(i, acc)$. Estado inicial $s_0 = (d, 0)$.
+- Es final si $i = h$.
+- $\text{transformar}(i, acc) = (i + 1,\ acc + e_i)$.
+- Invariante: $\text{Inv}(i, acc) \equiv d \le i \le h \land acc = E[d, i)$.
+
+**1.** $\text{Inv}(s_0)$: $d \le d \le h$ y $0 = E[d, d)$, la suma vacía.
+
+**2.** Si $i < h$ e $\text{Inv}(i, acc)$, entonces
+$acc + e_i = E[d, i) + e_i = E[d, i+1)$ y $i + 1 \le h$; vale
+$\text{Inv}(i+1, acc + e_i)$.
+
+**3.** En el estado final $i = h$, así que $acc = E[d, h)$.
+
+**4.** $h - i$ es un natural que baja en 1 en cada paso, así que se llega al
+estado final después de $h - d$ pasos.
+
+Luego $\text{energiaTramo}(d, h) = E[d, h)$. Con el mismo argumento, cambiando
+el estado por $(i, suma, masa)$ y la invariante por
+$suma = S[d, i) \land masa = M[d, i)$, se tiene
+$\text{resumenTramo}(d, h) = (S[d, h), M[d, h))$.
+
+### Lema 2: partir no pierde ni repite partículas
+
+Si $h - d > c \ge 1$, entonces $h - d \ge 2$, y con
+$m = d + \lfloor (h - d) / 2 \rfloor$:
 
 ```math
-P_f(k+1) \rightarrow \text{if } (k+1 == 0)\ 1 \text{ else } (k+1) \ast P_f(k) \rightarrow (k+1) \ast P_f(k)
-```
-
-Usando la hipótesis de inducción (HI):
-
-```math
-\rightarrow (k+1) \ast k! = (k+1)!
-```
-
-Por lo tanto, $P_f(k + 1) == f(k + 1)$.
-
-Concluimos por inducción que $\forall n \in \mathbb{N} : P_f(n) == n!$
-
-### Ejemplo: el máximo de una lista
-
-Sea $f : \text{List}[\mathbb{N}] \to \mathbb{N}$ la función que calcula el
-máximo de una lista de enteros positivos, no vacía. Y sea $P_f$ el siguiente
-programa en Scala:
-
-```scala
-def maxLin(l: List[Int]): Int = {
-  if (l.tail.isEmpty) l.head
-  else math.max(maxLin(l.tail), l.head)
-}
-```
-
-Demostraremos que:
-
-```math
-\forall n \in \mathbb{N} \setminus \{0\} : P_f(\text{List}(a_1, a_2, \ldots, a_n)) == f(\text{List}(a_1, a_2, \ldots, a_n))
-```
-
-**Caso base:** $n = 1$
-
-```math
-P_f(\text{List}(a_1)) \rightarrow \text{if } \text{List}(a_1).\text{tail.isEmpty then } \text{List}(a_1).\text{head else } \ldots \rightarrow \text{List}(a_1).\text{head} \rightarrow a_1
-```
-
-Por otro lado, $f(\text{List}(a_1)) = a_1$. Entonces
-$P_f(\text{List}(a_1)) == f(\text{List}(a_1))$.
-
-**Caso de inducción:** $n = k + 1$, $k \geq 1$. Se debe demostrar:
-
-```math
-P_f(\text{List}(b_1, b_2, \ldots, b_k)) == f(\text{List}(b_1, b_2, \ldots, b_k)) \rightarrow P_f(\text{List}(a_1, a_2, \ldots, a_{k+1})) == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))
-```
-
-Empecemos por calcular qué devuelve $P_f$ usando el modelo de sustitución:
-
-```math
-P_f(L) \rightarrow \text{if } L.\text{tail.isEmpty then } L.\text{head else math.max}(P_f(L.\text{tail}), L.\text{head})
+1 \le \left\lfloor \tfrac{h-d}{2} \right\rfloor < h - d
+\;\Longrightarrow\;
+d < m < h
 ```
 
 ```math
-\rightarrow \text{math.max}(P_f(\text{List}(a_2, \ldots, a_{k+1})), a_1)
+[d, m) \cup [m, h) = [d, h)
+\qquad
+[d, m) \cap [m, h) = \emptyset
 ```
 
-Sea $b = P_f(\text{List}(a_2, \ldots, a_{k+1}))$; por la hipótesis de
-inducción, $b = f(\text{List}(a_2, \ldots, a_{k+1}))$. Hay dos posibilidades:
-
-- Si $\text{math.max}(b, a_1) = b$, entonces $b \geq a_1$ y
- $b == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))$.
-- Si $\text{math.max}(b, a_1) = a_1$, entonces $a_1 \geq b$ y
- $a_1 == f(\text{List}(a_1, a_2, \ldots, a_{k+1}))$.
-
-Por lo tanto, $P_f(L) == f(L)$.
-
-Concluimos por inducción que:
+Todo índice $i$ con $d \le i < h$ cumple exactamente una de $i < m$ o
+$i \ge m$, así que queda en exactamente una de las dos mitades: ninguna
+partícula se pierde y ninguna se cuenta dos veces. Como las dos mitades son
+no vacías, las dos son estrictamente más cortas que $[d, h)$. Por la misma
+razón, para toda $f$ que se sume sobre índices:
 
 ```math
-\forall n \in \mathbb{N} \setminus \{0\} : P_f(\text{List}(a_1, a_2, \ldots, a_n)) == f(\text{List}(a_1, a_2, \ldots, a_n))
+\sum_{i=d}^{h-1} f(i) = \sum_{i=d}^{m-1} f(i) + \sum_{i=m}^{h-1} f(i)
 ```
 
-## 2. Argumentar la corrección de programas iterativos
+### Teorema: `energiaParalela` da la energía del sistema
 
-Para argumentar la corrección de programas iterativos, se debe formalizar cómo
-es la iteración. Esto implica definir:
+Se demuestra $\forall\, d \le h : \text{repartir}(d, h) = E[d, h)$ por
+inducción fuerte sobre $k = h - d$.
 
-- Cómo se representa un estado de la iteración, $s$.
-- Cuál es el estado inicial, $s_0$.
-- Cuál es el estado final (o cómo se reconoce que un estado es final): $s_f$.
-- Qué condición (o predicado) cumple todo estado: $\text{Inv}(s)$ (invariante
-  de la iteración).
-- El mecanismo para pasar de un estado al siguiente: $\text{transformar}(s)$.
-  Si $s_i$ es el estado $i$, entonces $\text{transformar}(s_i) = s_{i+1}$.
-
-Un programa iterativo tiene la siguiente forma:
-
-```scala
-def Pf(a: A): B = { // Pf recibe a de tipo A, y devuelve f(a) de tipo B
-  def Pf_iter(s: Estado): B =
-    if (esFinal(s)) respuesta(s) else Pf_iter(transformar(s))
-  Pf_iter(s0)
-}
-```
-
-Demostración de corrección:
-
-- $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
-- Si $(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$:
-  el nuevo estado cumple la condición invariante si el estado anterior la
-  cumplía.
-- De lo anterior se concluye $\text{Inv}(s_f)$, es decir, el estado final
-  cumple la condición invariante. Luego,
-  $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$.
-- Finalmente, demostrar que siempre se llega al estado final $s_f$. Esto
-  implica que
-  $P_f(a) == \text{iter}(s_0) == \text{respuesta}(s_f) == f(a)$.
-
-### Ejemplo: factorial iterativo
-
-Considere el siguiente programa iterativo en Scala para calcular la función
-factorial:
-
-```scala
-def Pf(n: Int): Int = { // Pf recibe n de tipo Int, y devuelve n! de tipo Int
-  def Pf_iter(i: Int, n: Int, ac: Int): Int =
-    if (i > n) ac else Pf_iter(i + 1, n, i * ac)
-  Pf_iter(1, n, 1)
-}
-```
-
-Este programa implementa el siguiente proceso iterativo:
-
-- Un estado $s = (i, n, ac)$.
-- El estado inicial es $s_0 = (1, n, 1)$.
-- $(i, n, ac)$ es final si $i > n$, o lo que es lo mismo, si $i = n + 1$.
-- La invariante de ciclo es
-  $\text{Inv}(i, n, ac) \equiv i \leq n + 1 \land ac = (i-1)!$.
-  La invariante de ciclo es una relación que SIEMPRE se cumple en el ciclo.
-- $\text{transformar}((i, n, ac)) = (i+1, n, i \ast ac)$.
-
-Ahora, demostramos los puntos mencionados:
-
-**1.** $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
+**Caso base:** $k \le c$.
 
 ```math
-s_0 = (1, n, 1) \implies 1 \leq n + 1 \land 1 = 0!
+\text{repartir}(d, h) \rightarrow \text{energiaTramo}(d, h) = E[d, h)
+\quad \text{(Lema 1)}
 ```
 
-**2.** La invariante se mantiene con la transformación de estados,
-$(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$:
-
-1. Primer cambio, $i = i + 1$, lo que implica $ac = ((i+1) - 1)! = i!$.
-2. Segundo cambio, $ac = i \ast ac$, entonces $ac = (i - 1)! \ast i = i!$.
-3. Como se puede ver en ambos cambios indicados en la transformación, la
-   invariante se mantiene.
-
-**3.** $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$
+**Caso de inducción:** $k > c$. Por el Lema 2, $d < m < h$ y los dos tramos
+son más cortos que $k$, así que vale la hipótesis de inducción para los dos.
+`parallel(a, b)` devuelve el par $(a, b)$: cambia el orden en que se evalúan,
+no los valores.
 
 ```math
-(n + 1 \leq n + 1) \land ac = ((n+1)-1)! \rightarrow ac == n!
+\text{repartir}(d, h) \rightarrow \text{izquierda} + \text{derecha}
+\overset{HI}{=} E[d, m) + E[m, h)
+\overset{\text{Lema 2}}{=} E[d, h)
 ```
 
-**4.** En cada paso, la componente $i$ del estado incrementa, acercándose a $n+1$.
-Después de $n$ iteraciones, se alcanza $n+1$.
+Entonces $\text{energiaParalela}(s, u) = \text{repartir}(0, n) = E[0, n)$ para
+todo umbral $u$, que es lo mismo que calcula `energiaSecuencial`. El umbral
+solo decide la forma del árbol, no el valor.
 
-Esto implica que $P_f(n) == \text{iter}(1, n, 1) == n!$
+### Teorema: `centroDeMasaParalelo` da el centro de masa
 
-### Ejemplo: el máximo de una lista
-
-Se desea calcular el máximo de una lista de enteros positivos, no vacía. Sea
-$f : \text{List}[\mathbb{N}] \to \mathbb{N}$ la función que calcula ese valor.
-Y sea $P_f$ el siguiente programa en Scala:
-
-```scala
-def maxIt(l: List[Int]): Int = {
-  def maxAux(max: Int, l: List[Int]): Int = {
-    if (l.isEmpty) max
-    else maxAux(math.max(max, l.head), l.tail)
-  }
-  maxAux(l.head, l.tail)
-}
-```
-
-Este programa implementa el siguiente proceso iterativo:
-
-- Un estado $s = (max, l)$ donde $l = \text{List}(a_i, a_{i+1}, \ldots, a_k)$
-  es una cola de $L$.
-- El estado inicial es
-  $s_0 = (L.\text{head}, L.\text{tail}) = (a_1, \text{List}(a_2, \ldots, a_k))$.
-- $s = (max, l)$ es final si $l$ es vacía.
-- $\text{Inv}(max, l) \equiv l = \text{List}(a_i, a_{i+1}, \ldots, a_k) \land max = f(\text{List}(a_1, a_2, \ldots, a_{i-1}))$.
-- $\text{transformar}((max, l)) = (nmax, l.\text{tail})$ donde $nmax = max$ si
-  $max \geq l.\text{head}$, y $nmax = l.\text{head}$ si no.
-
-Demostración de los puntos:
-
-**1.** $\text{Inv}(s_0)$: el estado inicial cumple la condición invariante.
+Sea $\oplus$ la operación con que se combinan las dos mitades:
 
 ```math
-s_0 = (a_1, \text{List}(a_2, \ldots, a_k)) \implies a_1 = f(\text{List}(a_1))
+(S_1, M_1) \oplus (S_2, M_2) = (S_1 + S_2,\; M_1 + M_2)
 ```
 
-**2.** $(s_i \neq s_f \land \text{Inv}(s_i)) \rightarrow \text{Inv}(\text{transformar}(s_i))$
+Con el mismo esquema de inducción, usando el Lema 1 para `resumenTramo` en el
+caso base y el Lema 2 en cada componente:
 
 ```math
-\neg\, l.\text{isEmpty} \land l = \text{List}(a_i, a_{i+1}, \ldots, a_k) \land max = f(\text{List}(a_1, a_2, \ldots, a_{i-1}))
+\text{repartir}(d, h) = (S[d, m), M[d, m)) \oplus (S[m, h), M[m, h)) = (S[d, h), M[d, h))
+```
+
+Al final, sobre $(S, M) = (S[0, n), M[0, n))$, el programa devuelve
+$(0, 0)$ si $M = 0$ y $(S_x / M,\ S_y / M)$ si no, que es $\text{CM}(s)$.
+
+### Por qué la suma sirve para repartir y el promedio no
+
+**La operación que combina es asociativa.** La suma de reales es asociativa y
+tiene neutro 0. $\oplus$ es la suma componente a componente en
+$\mathbb{R}^2 \times \mathbb{R}$, y hereda las dos propiedades:
+
+```math
+\big((S_1, M_1) \oplus (S_2, M_2)\big) \oplus (S_3, M_3)
+= (S_1 + S_2 + S_3,\; M_1 + M_2 + M_3)
+= (S_1, M_1) \oplus \big((S_2, M_2) \oplus (S_3, M_3)\big)
 ```
 
 ```math
-\rightarrow l.\text{tail} = \text{List}(a_{i+1}, \ldots, a_k) \land nmax = f(\text{List}(a_1, \ldots, a_i))
+(S, M) \oplus ((0, 0), 0) = (S, M)
 ```
 
-**3.** $\text{Inv}(s_f) \rightarrow \text{respuesta}(s_f) == f(a)$
+Por eso cualquier árbol de particiones, sea cual sea el umbral, agrupa los
+mismos sumandos de otra forma y llega al mismo resultado.
+
+**El promedio no es asociativo.** Si dos resultados parciales se combinaran
+promediándolos, $a \oslash b = \tfrac{a + b}{2}$:
 
 ```math
-\text{Inv}((max, \text{List}())) \rightarrow max = f(\text{List}(a_1, \ldots, a_k))
+(a \oslash b) \oslash c = \tfrac{a}{4} + \tfrac{b}{4} + \tfrac{c}{2}
+\;\neq\;
+\tfrac{a}{2} + \tfrac{b}{4} + \tfrac{c}{4} = a \oslash (b \oslash c)
 ```
 
-**4.** En cada paso, la lista $l$ se reduce, acercándose a ser vacía. Después de
-$k$ iteraciones, $l = \text{List}()$.
+El resultado dependería de cómo se partió el sistema. Además el promedio de
+dos promedios da el mismo peso a las dos mitades, cuando el centro de masa
+debe pesar cada mitad por su masa:
 
-Esto implica que $P_f(L) == \text{maxAux}(L.\text{head}, L.\text{tail}) == f(L)$
+```math
+\text{CM}[d, h) = \frac{S[d, m) + S[m, h)}{M[d, m) + M[m, h)}
+\;\neq\;
+\frac{1}{2}\left(\frac{S[d, m)}{M[d, m)} + \frac{S[m, h)}{M[m, h)}\right)
+\quad \text{en general}
+```
+
+Contraejemplo: dos partículas de masa 1 en el origen y una de masa 1 en
+$(9, 0)$, con umbral 1. La partición queda en $[0, 1)$ y $[1, 3)$. Los centros
+de las mitades son $(0, 0)$ y $(4{,}5;\ 0)$, cuyo promedio es
+$(2{,}25;\ 0)$, pero el centro del sistema es $(9/3,\ 0) = (3, 0)$. Llevando
+los pares: $((0,0), 1) \oplus ((9,0), 2) = ((9, 0), 3)$ y
+$(9/3,\ 0) = (3, 0)$.
+
+La división no es asociativa ni tiene sentido sobre un tramo sin masa. Por eso
+se saca del árbol y se aplica una sola vez, al final. Así una mitad sin masa
+nunca divide entre cero.
+
+**Punto flotante.** Todo lo anterior vale en $\mathbb{R}$. En `Double`, la suma
+redondea, y $(a + b) + c$ puede diferir de $a + (b + c)$ en las últimas cifras.
+Por eso las pruebas comparan la versión paralela con la secuencial con una
+tolerancia de $10^{-6}$ y no con igualdad exacta.
+
+## Punto 4: trabajo y profundidad
+
+### El modelo
+
+Las funciones describen el árbol de llamados de `repartir` sobre $n$
+partículas con $c = \max(\text{umbral}, 1)$. Un tramo de tamaño $k > c$ se
+parte en $\lfloor k/2 \rfloor$ a la izquierda y $\lceil k/2 \rceil$ a la
+derecha, porque $m - d = \lfloor k/2 \rfloor$. Un tramo $k \le c$ es una hoja
+y cuesta $k$ operaciones.
+
+- **Trabajo** $W(n)$: las operaciones de todas las hojas.
+- **Profundidad** $D(n, c)$: el costo del camino más caro de la raíz a una
+  hoja, con 1 por cada partición y el tamaño de la hoja al final.
+
+```math
+D(k, c) =
+\begin{cases}
+k & \text{si } k \le c \\
+1 + \max\big(D(\lfloor k/2 \rfloor, c),\; D(\lceil k/2 \rceil, c)\big) & \text{si } k > c
+\end{cases}
+```
+
+```math
+T_p(n, c) = D(n, c) + \frac{W(n)}{p}
+```
+
+### `trabajo` es correcto
+
+Por el Lema 2, las hojas del árbol forman una partición de $[0, n)$: sus
+tamaños suman $n$ para cualquier umbral. Entonces $W(n) = n$, que es lo que
+devuelve `trabajo`, y repartir no lo baja.
+
+### `profundidad` es correcta
+
+Se demuestra $\forall k : \text{camino}(k) = D(k, c)$ por inducción fuerte
+sobre $k$.
+
+**Caso base:** $k \le c$. `camino(k)` devuelve $k = D(k, c)$.
+
+**Caso de inducción:** $k > c \ge 1$, así que $k \ge 2$ y
+$\lfloor k/2 \rfloor \le \lceil k/2 \rceil < k$. Vale la hipótesis de
+inducción para los dos.
+
+- Si $k$ es par, $\lfloor k/2 \rfloor = \lceil k/2 \rceil = k/2$ y el máximo
+  de un valor consigo mismo es ese valor:
+  ```math
+  \text{camino}(k) \rightarrow 1 + \text{camino}(k/2) \overset{HI}{=} 1 + D(k/2, c) = D(k, c)
+  ```
+- Si $k$ es impar, `tramo / 2` $= \lfloor k/2 \rfloor$ y
+  `tramo - tramo / 2` $= \lceil k/2 \rceil$:
+  ```math
+  \text{camino}(k) \rightarrow 1 + \max(\text{camino}(\lfloor k/2 \rfloor), \text{camino}(\lceil k/2 \rceil))
+  \overset{HI}{=} D(k, c)
+  ```
+
+**Terminación:** cada llamado recibe un tramo estrictamente menor que $k$, y
+los tramos son naturales.
+
+**Por qué el máximo y no solo la mitad mayor.** $D$ no crece con $k$: con
+$c = 5$, $D(5, 5) = 5$ pero $D(6, 5) = 1 + D(3, 5) = 4$. Por eso, con
+$k = 11$:
+
+```math
+D(11, 5) = 1 + \max(D(5, 5),\, D(6, 5)) = 1 + \max(5, 4) = 6
+```
+
+y seguir solo la mitad mayor daría $1 + 4 = 5$, menos que el camino crítico.
+
+**Forma cerrada.** Si $n = 2^k$ y $c = 2^j$ con $j \le k$, todas las mitades
+son iguales y se parte $k - j$ veces hasta llegar a tramos de $2^j$:
+
+```math
+D(2^k, 2^j) = (k - j) + 2^j
+```
+
+Por inducción sobre $k - j$: si $k = j$, $D = 2^j$; si $k > j$,
+$D(2^k, 2^j) = 1 + D(2^{k-1}, 2^j) = 1 + (k - 1 - j) + 2^j$. Los ejemplos del
+enunciado salen de aquí: $D(2^{10}, 2^{10}) = 1024$,
+$D(2^{10}, 2^9) = 1 + 512 = 513$ y $D(2^{10}, 2^0) = 10 + 1 = 11$.
+
+**La profundidad nunca supera el trabajo.** $D(k, c) \le k$, por inducción
+fuerte: si $k \le c$, $D = k$; si $k > c$, $k \ge 2$ y
+
+```math
+D(k, c) \overset{HI}{\le} 1 + \lceil k/2 \rceil \le k
+```
+
+### `tiempoEstimado` es correcto
+
+`tiempoEstimado(n, p, umbral)` devuelve
+`profundidad(n, umbral) + trabajo(n).toDouble / p`, que por lo anterior es
+$D(n, c) + n/p = T_p(n, c)$. La conversión a `Double` antes de dividir hace
+que $1000 / 3$ dé $333{,}\overline{3}$ y no $333$. Como $D$ no depende de $p$
+y $n/p$ baja cuando $p$ sube, la estimación nunca empeora al agregar
+procesadores.
