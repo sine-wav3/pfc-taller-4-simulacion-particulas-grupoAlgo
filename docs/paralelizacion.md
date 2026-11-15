@@ -164,14 +164,63 @@ abajo la aceleración baja a 5,5 y se queda ahí: cada partición agrega dos
 llamados que hay que repartir, y por debajo de cierto tamaño ese costo ya no se
 recupera con el tramo que se ahorra.
 
-La estimación del punto 4 y la medición coinciden donde no se parte nada y se
-separan en cuanto se parte. En la fila de control las dos dan 1. De ahí en
-adelante la estimación crece hasta 15,99 mientras la medición se queda en 6,45.
-La estimación cuenta operaciones y supone que los 16 núcleos están siempre
-ocupados y que crear un llamado no cuesta nada; el reloj incluye el costo de
-repartir, el acceso a una memoria que comparten todos los núcleos y lo que la
-máquina esté haciendo al lado. Sirve como techo y para comparar umbrales entre
-sí, no como pronóstico del reloj.
+### Comparación con la estimación del punto 4
+
+La estimación del punto 4 cuenta operaciones sobre el árbol de llamados. El
+trabajo es $W(n) = n$. La profundidad $D(n, c)$ es el camino más costoso de la
+raíz a una hoja: uno por partición más el tramo que queda sin partir. El
+tiempo con $p$ procesadores es $T_p = D + W/p$. La aceleración estimada es el
+trabajo, que es lo que tarda la versión secuencial en el modelo, dividido entre
+ese tiempo:
+
+```math
+S_{\text{est}}(n, p, c) = \frac{W(n)}{D(n, c) + \dfrac{W(n)}{p}}
+```
+
+Para un millón de partículas y $p = 16$, los procesadores lógicos de la
+máquina donde se calculó esta tabla, salen estos valores de `trabajo`,
+`profundidad` y `tiempoEstimado`. Si la tabla de `App.scala` se mide en una
+máquina con otro número de núcleos, se recalculan con ese $p$.
+
+| Umbral | Particiones | Profundidad | Tiempo estimado | Aceleración estimada | Aceleración medida |
+|---:|---:|---:|---:|---:|---:|
+| 1 000 000 (control) | 0 | 1 000 000 | 1 062 500,0 | 0,94 | pendiente |
+| 250 000 | 2 | 250 002 | 312 502,0 | 3,20 | pendiente |
+| 62 500 | 4 | 62 504 | 125 004,0 | 8,00 | pendiente |
+| 15 625 | 6 | 15 631 | 78 131,0 | 12,80 | pendiente |
+| 1 000 | 10 | 987 | 63 487,0 | 15,75 | pendiente |
+| 1 | 20 | 21 | 62 521,0 | 15,99 | pendiente |
+
+**Lo que el modelo dice.** Con el umbral igual al tamaño no se parte: la
+profundidad es todo el trabajo y $T_p = n + n/p$. Por eso la estimación da
+$16/17 \approx 0{,}94$ y no 1. El modelo cuenta el árbol como si la hoja única
+se resolviera en un procesador mientras los otros esperan su parte de $W/p$,
+que no existe. Por eso el control medido debe compararse con 1, no con 0,94.
+De ahí en adelante, cada partición divide la profundidad entre dos y la
+aceleración estimada sube hacia $p = 16$. Desde unas diez particiones, la
+profundidad ya es despreciable frente a $W/p$ y la estimación se queda en
+15,75 a 15,99, sin importar cuánto más se parta.
+
+**En qué se espera que se parezcan y en qué no.** Las dos deben coincidir en la
+fila de control, donde no se reparte nada, y en la tendencia: partir más
+acelera mientras haya pocos tramos por núcleo. Deben separarse en cuanto se
+parte, porque el modelo supone tres cosas que el reloj no cumple:
+
+1. Que crear un llamado de `parallel` no cuesta nada. En la máquina, cada
+   partición crea una tarea en el `ForkJoinPool`, que hay que encolar, robar y
+   esperar con `join`. Con umbral 1 eso son cerca de un millón de tareas para
+   mover un millón de partículas, y ese costo pesa más que el cálculo de cada
+   hoja. Por eso el modelo dice que el umbral 1 es el mejor, y es de esperar
+   que en el reloj quede entre los peores.
+2. Que los $p$ núcleos están siempre ocupados con trabajo útil. En la máquina
+   los 16 procesadores lógicos no son 16 núcleos completos si hay
+   hiperhilos, y comparten la memoria por la que pasa cada partícula.
+3. Que una operación cuesta lo mismo en cualquier parte. En la máquina una
+   partícula es un objeto en el montón, y recorrerlas depende de la caché y
+   del recolector de basura, que el modelo no ve.
+
+La estimación sirve como techo y para comparar umbrales entre sí, no como
+pronóstico del reloj.
 
 Con la aceleración medida de 6,45 sobre 16 núcleos, la ley de Amdahl da la
 fracción del cálculo que corre en serie, con p el número de núcleos:
