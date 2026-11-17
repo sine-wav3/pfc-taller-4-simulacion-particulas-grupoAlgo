@@ -55,7 +55,12 @@ class SimulacionParticulas {
   // Punto 2: magnitudes globales ----------------------------------------------
 
   /** La suma de las energías cinéticas, media masa por velocidad al cuadrado. */
-  def energiaSecuencial(s: Sistema): Double = ???
+  def energiaSecuencial(s: Sistema): Double = {
+    s.foldLeft(0.0) { (acc, p) => // recorre el arreglo con un total que empieza en 0.0
+      val v = p.vel.norma
+      acc + 0.5 * p.masa * v * v // por cada particula suma (1/2)*m*(v)^2 donde v es la norma de
+      // la velocidad (p.vel.norma)
+  }
 
   /** La suma de las masas. */
   def masaTotal(s: Sistema): Double = ???
