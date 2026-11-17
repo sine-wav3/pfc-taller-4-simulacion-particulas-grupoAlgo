@@ -20,7 +20,10 @@ class SimulacionParticulas {
   def mover(p: Particula, dt: Double): Particula = ???
 
   /** Avanza todo el sistema un paso de tiempo dt. */
-  def pasoSecuencial(s: Sistema, dt: Double): Sistema = ???
+  def pasoSecuencial(s: Sistema, dt: Double): Sistema = {
+    pasoSegmento(s, dt, 0, s.length)
+  } // esta función solo calcula [0, n] que es el caso que la maneja el tramo completo de
+  // pasoSegmento
 
   /** Avanza solo el tramo entre `desde` incluido y `hasta` excluido. */
   def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = {
@@ -28,7 +31,9 @@ class SimulacionParticulas {
       val p = s(desde + i)
       Particula(p.pos + p.vel * dt, p.vel, p.masa)
     }
-  }
+  } // hasta - desde calcula el tamaño del tramo (la "distancia" que hay entre ellos) donde a i
+  // se le asigna este valor que va de 0 a k - 1 (que seria desde.... hasta - 1) para calcular
+  // la nueva posición
 
   /**
    * Parte el sistema por la mitad con `parallel` mientras el tramo tenga más
