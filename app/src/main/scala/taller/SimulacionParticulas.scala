@@ -63,7 +63,11 @@ class SimulacionParticulas {
   }
 
   /** La suma de las masas. */
-  def masaTotal(s: Sistema): Double = ???
+  def masaTotal(s: Sistema): Double = {
+    s.foldLeft(0.0)((acc, p) => acc + p.masa) // simplemente calcula la masa total del sistema
+  } // foldleft recorre el arreglo de izquierda a derecha llevando un acumulador que empieza en 0.0
+    // y lo que sigye (acc, p) le indica como actualizarlo con cada particula p
+
 
   /**
    * La suma de las posiciones ponderadas por la masa, dividida entre la masa
