@@ -23,7 +23,12 @@ class SimulacionParticulas {
   def pasoSecuencial(s: Sistema, dt: Double): Sistema = ???
 
   /** Avanza solo el tramo entre `desde` incluido y `hasta` excluido. */
-  def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = ???
+  def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = {
+    Array.tabulate(hasta - desde) { i =>
+      val p = s(desde + i)
+      Particula(p.pos + p.vel * dt, p.vel, p.masa)
+    }
+  }
 
   /**
    * Parte el sistema por la mitad con `parallel` mientras el tramo tenga más
