@@ -39,7 +39,18 @@ class SimulacionParticulas {
    * Parte el sistema por la mitad con `parallel` mientras el tramo tenga más
    * elementos que el umbral, y por debajo de esa cifra resuelve en secuencial.
    */
-  def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = ???
+  def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
+    def avanzar(desde: Int, hasta: Int): Sistema =
+      if (hasta - desde <= umbral) pasoSegmento(s, dt, desde, hasta) // caso base verifica que el tramo
+        // hasta - desde es menor o igual a umnbral lo devuelve a pasoSegmento
+      else {
+        val mitad = desde + (hasta - desde) / 2 // se parte a la mitad y las dos mitades
+        val (izq, der) = parallel(avanzar(desde, mitad), avanzar(mitad, hasta)) // se calculan al vez con parallel
+        izq ++ der // concatena los resultados
+      }
+    avanzar(0, s.length)
+  }
+
 
   // Punto 2: magnitudes globales ----------------------------------------------
 
