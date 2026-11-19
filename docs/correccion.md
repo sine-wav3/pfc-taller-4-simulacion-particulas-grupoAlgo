@@ -1,5 +1,341 @@
 # Informe de corrección
 
+## 0. Notación y especificación para los puntos 1 y 2.
+
+Un sistema de $n$ partículas se escribe como una sucesión indexada
+
+$$
+s = (p_0, p_1, \ldots, p_{n-1}), \qquad p_i = (\mathrm{pos}_i, \mathrm{vel}_i, m_i),
+$$
+
+con $\mathrm{pos}_i, \mathrm{vel}_i \in \mathbb{R}^2$ y $m_i \in \mathbb{R}$. Las
+operaciones de `Vector2` son componente a componente:
+
+$$
+(x_1, y_1) + (x_2, y_2) = (x_1 + x_2,\; y_1 + y_2), \qquad
+(x, y) \cdot k = (kx,\; ky),
+$$
+
+y la norma es $\lVert (x, y) \rVert = \sqrt{x^2 + y^2}$.
+
+Un tramo $[d, h)$ denota los índices $\{d, d+1, \ldots, h-1\}$, con
+$0 \le d \le h \le n$. Para arreglos se escribe $\lvert a \rvert$ la longitud de
+$a$ y $a_j$ su elemento en la posición $j$.
+
+La transformación de movimiento que aplica el código (la auxiliar `mover` y la
+expresión inline de `pasoSegmento`) es
+
+$$
+\mu_{dt}(p_i) = (\mathrm{pos}_i + \mathrm{vel}_i \, dt,\; \mathrm{vel}_i,\; m_i).
+$$
+
+La velocidad y la masa quedan invariantes; solo cambia la posición.
+
+**Especificación del punto 1.** `pasoSecuencial(s, dt)` debe devolver un arreglo
+$t$ con $\lvert t \rvert = n$ y $t_i = \mu_{dt}(p_i)$ para todo $0 \le i < n$.
+`pasoSegmento(s, dt, d, h)` debe devolver el arreglo
+$(\mu_{dt}(p_d), \ldots, \mu_{dt}(p_{h-1}))$, de longitud $h - d$.
+`pasoParalelo(s, dt, umbral)` debe devolver lo mismo que `pasoSecuencial` para
+todo sistema, todo `dt` y todo umbral.
+
+### 1. Correciones para las funciones del punto 1
+## 1.1. Corrección de `pasoSegmento`
+
+Se usa la semántica de `Array.tabulate`: `Array.tabulate(k)(f)` construye un
+arreglo $a$ de longitud $k$ tal que $a_j = f(j)$ para $0 \le j < k$.
+
+**Lema 1 (segmento).** Para $0 \le d \le h \le n$, `pasoSegmento(s, dt, d, h)`
+devuelve el arreglo $a$ con $\lvert a \rvert = h - d$ y
+$a_j = \mu_{dt}(p_{d+j})$.
+
+*Demostración.* El código llama `Array.tabulate(h - d)` con cuerpo
+$f(j) = \texttt{Particula}(p.\mathrm{pos} + p.\mathrm{vel} \cdot dt,\; p.\mathrm{vel},\; p.\mathrm{masa})$
+donde $p = s(d+j)$. Como $0 \le j < h - d$, se tiene $d \le d + j \le h - 1 < n$,
+así que la lectura $s(d+j)$ es válida y devuelve $p_{d+j}$. El cuerpo construye
+exactamente $\mu_{dt}(p_{d+j})$: la posición nueva es la anterior más la velocidad
+por $dt$, y la velocidad y la masa se copian. Por la semántica de `tabulate`,
+$a_j = \mu_{dt}(p_{d+j})$ y $\lvert a \rvert = h - d$. 
+
+Nótese que la aplicación $j \mapsto d + j$ es una biyección entre las posiciones
+locales $\{0, \ldots, h-d-1\}$ del arreglo nuevo y los índices globales
+$\{d, \ldots, h-1\}$ del tramo: cada partícula del tramo aparece exactamente una
+vez, en su orden, y ninguna partícula fuera del tramo se toca.
+
+**Corolario (pasoSecuencial).** `pasoSecuencial(s, dt)` llama
+`pasoSegmento(s, dt, 0, n)`. Por el Lema 1 con $d = 0$ y $h = n$, el resultado
+cumple $\lvert t \rvert = n$ y $t_i = \mu_{dt}(p_i)$, que es la especificación.
+Con $n = 0$, `tabulate(0)` produce el arreglo vacío, que es el resultado correcto
+para el sistema vacío. 
+
+## 1.2. Corrección de `pasoParalelo`
+
+El código fija $u = \max(\mathrm{umbral}, 1)$ y define el llamado interno
+`avanzar(d, h)`:
+
+- si $h - d \le u$, devuelve `pasoSegmento(s, dt, d, h)`;
+- si $h - d > u$, calcula $m = d + \lfloor (h - d)/2 \rfloor$ (la división entera
+  de Scala sobre enteros no negativos es el piso), ejecuta
+  `parallel(avanzar(d, m), avanzar(m, h))` y devuelve `izq ++ der`.
+
+La raíz es `avanzar(0, n)`.
+
+### 1.2.1 Terminación
+
+**Lema 2 (terminación).** Todo llamado `avanzar(d, h)` termina.
+
+*Demostración.* Por inducción sobre $L = h - d$. Si $L \le u$ es el caso base,
+que no recursa. Si $L > u \ge 1$, entonces $L \ge 2$ y
+$1 \le \lfloor L/2 \rfloor \le L - 1$, de modo que las longitudes de los hijos,
+$L_1 = \lfloor L/2 \rfloor$ y $L_2 = L - \lfloor L/2 \rfloor$, cumplen
+$1 \le L_1, L_2 < L$. Por hipótesis de inducción ambos hijos terminan. 
+
+El ajuste $u = \max(\mathrm{umbral}, 1)$ es necesario para este argumento: con
+$u = 0$ y $L = 1$ se tendría $\lfloor 1/2 \rfloor = 0$ y el hijo derecho
+`avanzar(d, h)` sería idéntico al padre, sin reducción. Para $\mathrm{umbral} \ge 1$
+el máximo no cambia nada, así que la semántica pedida por el enunciado se
+conserva; para umbrales menores que 1 solo cambia la granularidad, no el
+resultado, como se prueba abajo.
+
+### 1.2.2 La partición no pierde ni repite partículas
+
+**Lema 3 (partición disjunta).** En cada paso recursivo, los conjuntos de índices
+de los hijos,
+
+$$
+I_1 = \{d, \ldots, m-1\}, \qquad I_2 = \{m, \ldots, h-1\},
+$$
+
+satisfacen $I_1 \cup I_2 = \{d, \ldots, h-1\}$, $I_1 \cap I_2 = \varnothing$ y
+$\lvert I_1 \rvert + \lvert I_2 \rvert = (m - d) + (h - m) = h - d$.
+
+*Demostración.* Es inmediato de $d < m < h$ (Lema 2): todo índice $i$ con
+$d \le i < h$ cumple o bien $i < m$ (está solo en $I_1$) o bien $i \ge m$ (está
+solo en $I_2$). El punto de corte $m$ pertenece únicamente al tramo derecho
+porque los tramos son semiabiertos. 
+
+Aplicando el lema inductivamente desde la raíz, los tramos de las hojas forman
+una partición de $\{0, \ldots, n-1\}$: cada índice pertenece a exactamente una
+hoja, y cada hoja procesa su índice una sola vez (Lema 1). Por lo tanto el
+reparto no pierde ni repite partículas, incluso con longitudes impares: por
+ejemplo, con $n = 5$ y $u = 1$ la raíz parte en $[0,2)$ y $[2,5)$, y el tramo de
+longitud 3 se parte en $[2,3)$ y $[3,5)$; las hojas son $[0,1)$, $[1,2)$, $[2,3)$,
+$[3,4)$ y $[4,5)$, cuya unión disjunta es $\{0,1,2,3,4\}$.
+
+### 1.2.3 La concatenación preserva el orden y es asociativa
+
+**Lema 4 (concatenación).** Para arreglos $a$ y $b$, el arreglo $a \mathbin{++} b$
+tiene longitud $\lvert a \rvert + \lvert b \rvert$ y
+
+$$
+(a \mathbin{++} b)_j =
+\begin{cases}
+a_j & \text{si } 0 \le j < \lvert a \rvert, \\
+b_{j - \lvert a \rvert} & \text{si } \lvert a \rvert \le j < \lvert a \rvert + \lvert b \rvert.
+\end{cases}
+$$
+
+**Lema 5 (asociatividad de la concatenación).**
+$(a \mathbin{++} b) \mathbin{++} c = a \mathbin{++} (b \mathbin{++} c)$.
+
+*Demostración.* Dos arreglos son iguales si tienen la misma longitud y el mismo
+elemento en cada posición. Ambas agrupaciones tienen longitud
+$\lvert a \rvert + \lvert b \rvert + \lvert c \rvert$, y aplicando el Lema 4 dos
+veces, en ambas la posición $j$ contiene el elemento $j$-ésimo de la sucesión
+formada por los elementos de $a$, seguidos de los de $b$, seguidos de los de $c$.
+Luego son iguales. 
+
+La asociatividad garantiza que la forma del árbol de recursión (cómo se agrupen
+las combinaciones parciales) no altera el resultado final. La concatenación no es
+conmutativa, y por eso el código respeta el orden: siempre concatena `izq` antes
+que `der`, y los tramos izquierdos contienen los índices menores.
+
+### 1.2.4 Igualdad entre la versión paralela y la secuencial
+
+**Teorema (equivalencia).** Para todo $0 \le d \le h \le n$, `avanzar(d, h)`
+devuelve el mismo arreglo que `pasoSegmento(s, dt, d, h)`. En particular,
+`pasoParalelo(s, dt, umbral)` devuelve lo mismo que `pasoSecuencial(s, dt)` para
+todo sistema, todo `dt` y todo umbral.
+
+*Demostración.* Por inducción fuerte sobre $L = h - d$.
+
+Caso base, $L \le u$: el código llama directamente `pasoSegmento(s, dt, d, h)` y
+la igualdad es trivial.
+
+Paso inductivo, $L > u$: sean $m = d + \lfloor L/2 \rfloor$,
+$L_1 = m - d$ y $L_2 = h - m$, con $1 \le L_1, L_2 < L$. Por hipótesis de
+inducción y el Lema 1,
+
+$$
+\mathrm{izq}_j = \mu_{dt}(p_{d+j}) \;\; (0 \le j < L_1), \qquad
+\mathrm{der}_k = \mu_{dt}(p_{m+k}) \;\; (0 \le k < L_2).
+$$
+
+Por el Lema 4, el resultado $r = \mathrm{izq} \mathbin{++} \mathrm{der}$ tiene
+longitud $L_1 + L_2 = L = h - d$ y:
+
+- para $0 \le j < L_1$: $r_j = \mathrm{izq}_j = \mu_{dt}(p_{d+j})$;
+- para $L_1 \le j < L$: $r_j = \mathrm{der}_{j - L_1} = \mu_{dt}(p_{m + j - L_1}) = \mu_{dt}(p_{d+j})$,
+  porque $m = d + L_1$.
+
+En ambos casos $r_j = \mu_{dt}(p_{d+j})$, que es exactamente el contenido de
+`pasoSegmento(s, dt, d, h)` según el Lema 1. Tomando la raíz $d = 0$, $h = n$ se
+obtiene la igualdad con `pasoSecuencial`. 
+
+### 1.2.5 Ausencia de interferencia entre tareas
+
+Las dos ramas de `parallel` solo leen el arreglo compartido `s`; cada una escribe
+únicamente en arreglos nuevos creados por `Array.tabulate` dentro de su propio
+tramo, y `Particula` y `Vector2` son clases inmutables. Como los tramos son
+disjuntos (Lema 3) y no hay estado mutable compartido, las ramas no interfieren
+entre sí: el resultado es determinista y no depende del orden en que el
+planificador ejecute las tareas. Además, ambas versiones hacen el trabajo por
+partícula con la misma expresión dentro de `pasoSegmento`, lo que también hace
+comparables sus tiempos (el caso de control del punto 5).
+
+## 2. Corrección de las magnitudes globales (punto 2)
+
+### 2.1 Un lema sobre `foldLeft`
+
+`s.foldLeft(z)(f)` evalúa
+$f(\ldots f(f(z, p_0), p_1) \ldots, p_{n-1})$. Cuando
+$f(\mathrm{acc}, p) = \mathrm{acc} + g(p)$ y $z$ es el neutro de la suma, el
+resultado es la suma agrupada por la izquierda:
+
+$$
+\big(\cdots((0 + g(p_0)) + g(p_1)) \cdots \big) + g(p_{n-1})
+= \sum_{i=0}^{n-1} g(p_i),
+$$
+
+donde la última igualdad vale en $\mathbb{R}$ porque la suma es asociativa y $0$
+es su neutro. Con $n = 0$ el pliegue devuelve el inicial, que coincide con la
+suma vacía. En coma flotante la igualdad es salvo redondeo (sección 5).
+
+### 2.2 `masaTotal`
+
+El código usa $g(p) = m$ y $z = 0.0$. Por el lema,
+
+$$
+\texttt{masaTotal}(s) = \sum_{i=0}^{n-1} m_i = M,
+$$
+
+que es la definición de masa total del enunciado. Para el sistema vacío devuelve
+$0.0$, el neutro, como corresponde a una suma sin términos.
+
+### 2.3 `energiaSecuencial`
+
+El código calcula, por partícula, $v = \lVert \mathrm{vel}_i \rVert$ y acumula
+$0.5 \cdot m_i \cdot v \cdot v$. En los reales,
+
+$$
+0.5 \, m_i \, v \, v = \tfrac{1}{2} m_i \lVert \mathrm{vel}_i \rVert^2,
+$$
+
+que es la energía cinética de la partícula. Por el lema del pliegue con
+$g(p_i) = \tfrac{1}{2} m_i \lVert \mathrm{vel}_i \rVert^2$ y $z = 0.0$:
+
+$$
+\texttt{energiaSecuencial}(s) = \sum_{i=0}^{n-1} \tfrac{1}{2} m_i \lVert \mathrm{vel}_i \rVert^2 = E,
+$$
+
+que es la especificación. Con el sistema vacío devuelve $0.0$. Cada término es
+no negativo cuando las masas lo son, así que el acumulador nunca decrece, lo que
+da una cota adicional de sanidad sobre el cálculo.
+
+### 2.4 `centroDeMasaSecuencial`
+
+La especificación es
+
+$$
+C(s) =
+\begin{cases}
+\dfrac{1}{M} \displaystyle\sum_{i=0}^{n-1} m_i \, \mathrm{pos}_i & \text{si } M \ne 0, \\[2mm]
+(0, 0) & \text{si } M = 0.
+\end{cases}
+$$
+
+El código primero calcula `m = masaTotal(s)`, que por la sección 4.2 es $M$.
+
+**Caso $M = 0$.** La rama `if (m == 0.0)` devuelve `Vector2(0.0, 0.0)`, que es
+exactamente el origen pedido. Este caso cubre el sistema vacío (suma vacía de
+masas) y cualquier sistema con masa total cero.
+
+**Caso $M \ne 0$.** El pliegue usa el neutro vectorial $(0,0)$ y la actualización
+$\mathrm{acc} + \mathrm{pos}_i \cdot m_i$. Como la suma y el producto escalar de
+`Vector2` son componente a componente, el acumulador mantiene el par de sumas
+
+$$
+\mathrm{suma} = \left( \sum_{i=0}^{n-1} m_i x_i, \; \sum_{i=0}^{n-1} m_i y_i \right)
+= \sum_{i=0}^{n-1} m_i \, \mathrm{pos}_i,
+$$
+
+por el mismo lema del pliegue aplicado a cada componente. El paso final
+`suma * (1.0 / m)` escala ambas componentes por $1/M$, y en los reales
+$z \cdot (1/M) = z / M$, así que
+
+$$
+\texttt{centroDeMasaSecuencial}(s) = \frac{1}{M} \sum_{i=0}^{n-1} m_i \, \mathrm{pos}_i = C(s).
+$$
+
+La división se hace una sola vez, al final, sobre la suma completa: el código
+nunca promedia resultados parciales. 
+
+## 2.4.1 Asociatividad: por qué la suma se puede repartir y el promedio no
+
+El enunciado pide explicar por qué la suma es una operación válida para combinar
+resultados parciales y el promedio no lo es directamente.
+
+**La suma sí.** En $\mathbb{R}$, la suma es asociativa
+($(a+b)+c = a+(b+c)$), conmutativa y tiene neutro $0$. Por eso, para cualquier
+partición del sistema en tramos disjuntos $s = s_1 \cup s_2$,
+
+$$
+\sum_{p \in s} g(p) = \sum_{p \in s_1} g(p) + \sum_{p \in s_2} g(p),
+$$
+
+sin importar cómo se agrupen los tramos. Lo mismo vale para la suma de
+`Vector2`, porque se define componente a componente sobre dos sumas reales, y
+para la concatenación de arreglos en el orden de los índices (Lema 5). Estas son
+exactamente las operaciones con las que el código combina: `+` en los pliegues
+del punto 2 y `++` en `pasoParalelo`.
+
+**El promedio no.** El promedio de promedios pondera igual a cada tramo aunque
+tengan distinto número de partículas o distinta masa. Contraejemplo con masas
+unitarias y posiciones sobre una recta: sean $s_1 = (0)$ y $s_2 = (4, 8)$. Los
+promedios parciales son $0$ y $6$, y su promedio es $3$, pero el promedio del
+sistema completo es
+
+$$
+\frac{0 + 4 + 8}{3} = 4 \ne 3.
+$$
+
+Formalmente, la operación $(\bar{a}, \bar{b}) \mapsto (\bar{a} + \bar{b})/2$ no
+es asociativa ni respeta los pesos de los tramos. La forma correcta de repartir
+el centro de masa es llevar por cada tramo el par (suma ponderada, masa),
+
+$$
+(S_k, M_k) = \left( \sum_{p \in s_k} m \, \mathrm{pos}, \; \sum_{p \in s_k} m \right),
+$$
+
+combinar los pares con la suma componente a componente, que sí es asociativa y
+tiene neutro $((0,0), 0)$, y dividir una sola vez al final:
+
+$$
+C(s_1 \cup s_2) = \frac{S_1 + S_2}{M_1 + M_2}.
+$$
+
+`centroDeMasaSecuencial` ya sigue este esquema (acumula $S$ y $M$ por separado y
+divide al final), y es lo que permite que su versión paralela del punto 3
+combine mitades sin perder información.
+
+**Nota sobre coma flotante.** Los argumentos anteriores son sobre los reales. En
+`Double`, la suma no es estrictamente asociativa porque cada operación redondea,
+$v \cdot v$ con $v = \sqrt{x^2 + y^2}$ puede diferir de $x^2 + y^2$ en unos pocos
+ulp, y multiplicar por $1/M$ puede diferir de dividir entre $M$ en el último
+bit. Por eso el enunciado indica que las pruebas comparen con una tolerancia
+pequeña en lugar de exigir igualdad exacta: las versiones secuencial y paralela
+coinciden matemáticamente y numéricamente dentro de esa tolerancia.
+
+
 ## Punto 3: las magnitudes globales en paralelo
 
 ### Especificación
