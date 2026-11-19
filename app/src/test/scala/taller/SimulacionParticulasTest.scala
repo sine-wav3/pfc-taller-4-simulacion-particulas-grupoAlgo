@@ -253,6 +253,8 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(cerca(masaTotal(grande.reverse), masaTotal(grande)))
   }
 
+  // centroDeMasaSecuencial pruebas implementadas ---------------------------------
+
   test("centroDeMasaSecuencial: el punto medio de dos masas iguales") {
     assert(cerca(centroDeMasaSecuencial(s), Vector2(2.0, 0.0)))
   }
@@ -266,6 +268,29 @@ class SimulacionParticulasTest extends AnyFunSuite {
       Particula(Vector2(0, 0), Vector2(0, 0), 3.0),
       Particula(Vector2(4, 0), Vector2(0, 0), 1.0))
     assert(cerca(centroDeMasaSecuencial(pesado), Vector2(1.0, 0.0)))
+  }
+
+  // centroDeMasaSecuencial pruebas propuestas --------------------------------------
+
+  test("centroDeMasaSecuencial: con una sola partícula es su propia posición") {
+    assert(cerca(centroDeMasaSecuencial(Array(s(1))), s(1).pos))
+  }
+
+  test("centroDeMasaSecuencial: la partícula de posición origen y masa 1 deja el centro en el origen") {
+    assert(cerca(centroDeMasaSecuencial(Array(p)), Vector2(0.0, 0.0)))
+  }
+
+  test("centroDeMasaSecuencial: no depende del orden de las partículas") {
+    assert(cerca(centroDeMasaSecuencial(grande), centroDeMasaSecuencial(grande.reverse)))
+  }
+
+  test("centroDeMasaSecuencial: no depende de la velocidad") {
+    assert(cerca(centroDeMasaSecuencial(s),
+      centroDeMasaSecuencial(s.map(q => Particula(q.pos, Vector2(100, -100), q.masa)))))
+  }
+
+  test("centroDeMasaSecuencial: al avanzar un paso con velocidad promedio ponderada nula, el centro no cambia") {
+    assert(cerca(centroDeMasaSecuencial(pasoSecuencial(s, 0.0)), centroDeMasaSecuencial(s)))
   }
 
   // Punto 3 -------------------------------------------------------------------
