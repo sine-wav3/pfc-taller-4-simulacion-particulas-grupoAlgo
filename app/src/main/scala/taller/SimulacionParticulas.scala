@@ -60,7 +60,7 @@ class SimulacionParticulas {
       val v = p.vel.norma
       acc + 0.5 * p.masa * v * v // por cada particula suma (1/2)*m*(v)^2 donde v es la norma de
       // la velocidad (p.vel.norma)
-    }
+    }}
 
     /** La suma de las masas. */
     def masaTotal(s: Sistema): Double = {
@@ -88,7 +88,7 @@ class SimulacionParticulas {
     /** La energía del sistema, repartida con el mismo umbral del punto 1. */
     def energiaParalela(s: Sistema, umbral: Int): Double = {
       // Un umbral cero o negativo se trata como 1, para que la recursión toque fondo.
-      val corte = math.max(umbral, 1)}
+      val corte = math.max(umbral, 1)
 
       // Suma de 1/2 m v^2 en el tramo [desde, hasta), en secuencial.
       def energiaTramo(desde: Int, hasta: Int): Double = {
