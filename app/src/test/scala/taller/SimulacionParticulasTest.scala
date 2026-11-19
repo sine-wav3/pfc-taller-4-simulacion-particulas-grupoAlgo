@@ -182,6 +182,7 @@ class SimulacionParticulasTest extends AnyFunSuite {
   }
 
   // Punto 2 -------------------------------------------------------------------
+  // energiaSecuencial pruebas implementadas -----------------------------------
 
   test("energiaSecuencial: media masa por velocidad al cuadrado") {
     assert(cerca(energiaSecuencial(s), 25.0))
@@ -193,6 +194,32 @@ class SimulacionParticulasTest extends AnyFunSuite {
 
   test("energiaSecuencial: una partícula quieta no aporta energía") {
     assert(cerca(energiaSecuencial(Array(s(1))), 0.0))
+  }
+
+  // energiaSecuencial pruebas propuestas --------------------------------------
+
+  test("energiaSecuencial: una partícula con velocidad (1, 2) y masa 1 tiene energía 2.5") {
+    // 0.5 * 1 * (norma^2 = 5) = 2.5
+    assert(cerca(energiaSecuencial(Array(p)), 2.5))
+  }
+
+  test("energiaSecuencial: una partícula en reposo aporta cero") {
+    // la segunda partícula de s tiene velocidad (0, 0); la energía de s viene solo de la primera
+    assert(cerca(energiaSecuencial(s.drop(1)), 0.0))
+  }
+
+  test("energiaSecuencial: solo cuenta la partícula que se mueve en s") {
+    assert(cerca(energiaSecuencial(s.take(1)), energiaSecuencial(s)))
+  }
+
+  test("energiaSecuencial: la energía del sistema es la suma de las energías individuales") {
+    assert(cerca(energiaSecuencial(grande),
+      grande.map(q => energiaSecuencial(Array(q))).sum))
+  }
+
+  test("energiaSecuencial: es aditiva al partir el sistema en dos tramos") {
+    assert(cerca(energiaSecuencial(grande),
+      energiaSecuencial(grande.take(300)) + energiaSecuencial(grande.drop(300))))
   }
 
   test("masaTotal: suma las masas") {
