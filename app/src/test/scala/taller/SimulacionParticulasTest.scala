@@ -222,12 +222,35 @@ class SimulacionParticulasTest extends AnyFunSuite {
       energiaSecuencial(grande.take(300)) + energiaSecuencial(grande.drop(300))))
   }
 
+  // masaTotal pruebas implementadas ---------------------------------------------------
   test("masaTotal: suma las masas") {
     assert(cerca(masaTotal(s), 4.0))
   }
 
   test("masaTotal: el sistema vacío no tiene masa") {
     assert(masaTotal(vacio) == 0.0)
+  }
+
+  // masaTotal pruebas propuestas -----------------------------------------------------
+
+  test("masaTotal: una sola partícula devuelve su propia masa") {
+    assert(masaTotal(Array(p)) == 1.0)
+  }
+
+  test("masaTotal: coincide con la suma de las masas de un sistema grande") {
+    assert(cerca(masaTotal(grande), grande.map(_.masa).sum))
+  }
+
+  test("masaTotal: es positiva si todas las masas son positivas") {
+    assert(masaTotal(grande) > 0.0)
+  }
+
+  test("masaTotal: no depende de la posición ni de la velocidad") {
+    assert(cerca(masaTotal(pasoSecuencial(grande, 3.0)), masaTotal(grande)))
+  }
+
+  test("masaTotal: no depende del orden de las partículas") {
+    assert(cerca(masaTotal(grande.reverse), masaTotal(grande)))
   }
 
   test("centroDeMasaSecuencial: el punto medio de dos masas iguales") {
