@@ -105,6 +105,34 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(pasoSegmento(s, 1.0, 1, 1).isEmpty)
   }
 
+  // pasoSegmento pruebas propuestas ----------------------------------------------------
+
+  test("pasoSegmento: el tramo completo equivale a pasoSecuencial") {
+    assert(pasoSegmento(grande, 0.5, 0, grande.length)
+      .zip(pasoSecuencial(grande, 0.5))
+      .forall { case (a, b) => cerca(a.pos, b.pos) && a.vel == b.vel && a.masa == b.masa })
+  }
+
+  test("pasoSegmento: un tramo vacío (desde == hasta) no devuelve nada") {
+    assert(pasoSegmento(s, 1.0, 1, 1).isEmpty && pasoSegmento(grande, 1.0, 500, 500).isEmpty)
+  }
+
+  test("pasoSegmento: sobre el sistema vacío devuelve vacío") {
+    assert(pasoSegmento(vacio, 1.0, 0, 0).isEmpty)
+  }
+
+  test("pasoSegmento: el límite hasta es excluyente y el tamaño es hasta - desde") {
+    assert(pasoSegmento(grande, 0.5, 100, 400).length == 300)
+  }
+
+  test("pasoSegmento: la velocidad y la masa del tramo no cambian") {
+    assert(pasoSegmento(grande, 3.0, 250, 260)
+      .zip(grande.slice(250, 260))
+      .forall { case (a, b) => a.vel == b.vel && a.masa == b.masa })
+  }
+
+  /// pasoParalelo pruebas implementadas ------------------------------------------
+
   test("pasoParalelo: da lo mismo que el secuencial en un caso simple") {
     assert(pasoParalelo(Array(p), 2.0, 1).head.pos == Vector2(2.0, 4.0))
   }
