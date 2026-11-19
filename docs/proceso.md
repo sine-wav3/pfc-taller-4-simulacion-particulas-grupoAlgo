@@ -1,5 +1,344 @@
 # Informe de proceso
 
+## 1. Punto 1: un paso de la simulación
+
+### 1.1 La auxiliar `mover`
+
+```scala
+def mover(p: Particula, dt: Double): Particula =
+  Particula(p.pos + p.vel * dt, p.vel, p.masa)
+```
+
+`mover` construye una partícula nueva: la posición es la anterior más la velocidad
+escalada por `dt`; la velocidad y la masa se copian sin cambio. No modifica `p`,
+porque `Particula` y `Vector2` son inmutables.
+
+Ejemplo con `p0` y `dt = 0.5`:
+
+1. `p.vel * dt` = `(3, 4) * 0.5` = `(1.5, 2.0)`.
+2. `p.pos + (1.5, 2.0)` = `(1, 2) + (1.5, 2.0)` = `(2.5, 4.0)`.
+3. Resultado: `Particula(Vector2(2.5, 4.0), Vector2(3, 4), 2.0)`.
+
+En el código, `pasoSegmento` no llama a `mover` sino que aplica inline la misma
+expresión `Particula(p.pos + p.vel * dt, p.vel, p.masa)`, así que el efecto es
+idéntico.
+
+### 1.2 `pasoSegmento`: el núcleo del cálculo
+
+```scala
+def pasoSegmento(s: Sistema, dt: Double, desde: Int, hasta: Int): Sistema = {
+  Array.tabulate(hasta - desde) { i =>
+    val p = s(desde + i)
+    Particula(p.pos + p.vel * dt, p.vel, p.masa)
+  }
+}
+```
+
+Ejecución paso a paso:
+
+1. Calcula el tamaño del tramo: `k = hasta - desde`.
+2. `Array.tabulate(k)` crea un arreglo nuevo de tamaño `k` y evalúa la función
+   cuerpo con `i` tomando los valores locales `0, 1, ..., k - 1`.
+3. Para cada `i` local, el índice global en `s` es `desde + i`, que recorre
+   exactamente `desde, desde + 1, ..., hasta - 1`.
+4. Cada posición del arreglo nuevo se llena con la partícula movida. El arreglo
+   original `s` solo se lee; nunca se escribe.
+
+Ejemplo: `pasoSegmento(s, 0.5, 1, 3)`. El tramo es `[1, 3)`, de tamaño `k = 2`.
+
+| i local | índice global desde + i | posición anterior | vel por dt | posición nueva |
+|---------|-------------------------|-------------------|------------|----------------|
+| 0       | 1                       | (4.0, 0.0)        | (0.0, 1.0) | (4.0, 1.0)     |
+| 1       | 2                       | (-2.0, 6.0)       | (0.5, 0.0) | (-1.5, 6.0)    |
+
+Traza:
+
+```text
+pasoSegmento(s, 0.5, 1, 3)
+  k = 3 - 1 = 2
+  Array.tabulate(2):
+    i = 0 -> lee s(1) -> Particula(Vector2(4.0, 1.0),  Vector2(0, 2), 1.0)
+    i = 1 -> lee s(2) -> Particula(Vector2(-1.5, 6.0), Vector2(1, 0), 1.0)
+  resultado: arreglo de 2 partículas, en el orden del tramo
+```
+
+El resultado tiene exactamente `hasta - desde` elementos: ni el índice `desde - 1`
+ni el índice `hasta` quedan incluidos.
+
+### 1.3 `pasoSecuencial`: el tramo completo
+
+```scala
+def pasoSecuencial(s: Sistema, dt: Double): Sistema = {
+  pasoSegmento(s, dt, 0, s.length)
+}
+```
+
+Es una delegación directa: cubre el tramo `[0, n)`, que es todo el sistema. No hay
+recursión ni reparto; un solo llamado a `pasoSegmento` recorre las partículas de
+izquierda a derecha.
+
+Ejemplo: `pasoSecuencial(s, 0.5)` con `n = 4`.
+
+```text
+pasoSecuencial(s, 0.5)
+  pasoSegmento(s, 0.5, 0, 4)
+    k = 4
+    i = 0 -> s(0): (1, 2)  + (1.5, 2.0) = (2.5, 4.0)
+    i = 1 -> s(1): (4, 0)  + (0.0, 1.0) = (4.0, 1.0)
+    i = 2 -> s(2): (-2, 6) + (0.5, 0.0) = (-1.5, 6.0)
+    i = 3 -> s(3): (0, -4) + (0.0, -1.0) = (0.0, -5.0)
+```
+
+Llamemos `q0, q1, q2, q3` a las cuatro partículas movidas, en ese orden. El
+resultado es `Array(q0, q1, q2, q3)`. Esta notación se usa también en la traza de
+`pasoParalelo` para comparar ambas versiones.
+
+### 1.4 `pasoParalelo`: reparto por mitades
+
+```scala
+def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
+  val u = math.max(umbral, 1)
+  def avanzar(desde: Int, hasta: Int): Sistema =
+    if (hasta - desde <= u) pasoSegmento(s, dt, desde, hasta)
+    else {
+      val mitad = desde + (hasta - desde) / 2
+      val (izq, der) = parallel(avanzar(desde, mitad), avanzar(mitad, hasta))
+      izq ++ der
+    }
+  avanzar(0, s.length)
+}
+```
+
+Ejecución paso a paso:
+
+1. Se fija `u = max(umbral, 1)`. Para `umbral >= 1` el comportamiento es el del
+   enunciado; el máximo solo protege contra umbrales menores que 1, que harían
+   que un tramo de un elemento se siguiera partiendo sin reducirse.
+2. El llamado interno `avanzar(desde, hasta)` mide el tramo: `L = hasta - desde`.
+3. Caso base: si `L <= u`, el tramo se resuelve en secuencial con `pasoSegmento`,
+   sin crear tareas.
+4. Caso recursivo: si `L > u`, se calcula `mitad = desde + L / 2` (división entera)
+   y se lanzan con `parallel` dos llamados: el izquierdo sobre `[desde, mitad)` y
+   el derecho sobre `[mitad, hasta)`. El punto `mitad` es el inicio del derecho y
+   no pertenece al izquierdo, así que ningún índice se procesa dos veces.
+5. Cuando ambas mitades terminan, `izq ++ der` concatena los dos arreglos
+   parciales: primero los del tramo izquierdo, después los del derecho. La
+   concatenación restituye el orden original de los índices.
+6. El llamado raíz `avanzar(0, n)` devuelve el sistema completo movido.
+
+Ejemplo: `pasoParalelo(s, 0.5, 1)` con `n = 4`. Cada tramo de más de un elemento
+se parte, así que se llega hasta tramos de un solo elemento.
+
+```text
+pasoParalelo(s, 0.5, 1)
+  u = 1
+  avanzar(0, 4): L = 4 > 1, mitad = 0 + 4/2 = 2
+    parallel(
+      avanzar(0, 2): L = 2 > 1, mitad = 0 + 2/2 = 1
+        parallel(
+          avanzar(0, 1): L = 1 <= 1 -> pasoSegmento(s, 0.5, 0, 1) -> Array(q0)
+          avanzar(1, 2): L = 1 <= 1 -> pasoSegmento(s, 0.5, 1, 2) -> Array(q1)
+        )
+        izq ++ der -> Array(q0, q1)
+      ,
+      avanzar(2, 4): L = 2 > 1, mitad = 2 + 2/2 = 3
+        parallel(
+          avanzar(2, 3): L = 1 <= 1 -> pasoSegmento(s, 0.5, 2, 3) -> Array(q2)
+          avanzar(3, 4): L = 1 <= 1 -> pasoSegmento(s, 0.5, 3, 4) -> Array(q3)
+        )
+        izq ++ der -> Array(q2, q3)
+    )
+    izq ++ der -> Array(q0, q1, q2, q3)
+```
+
+Árbol de llamados y combinación de resultados parciales:
+
+```mermaid
+flowchart TD
+    A["avanzar(0, 4): parte en mitad = 2"] --> B["avanzar(0, 2): parte en mitad = 1"]
+    A --> C["avanzar(2, 4): parte en mitad = 3"]
+    B --> D["avanzar(0, 1): caso base, pasoSegmento, produce q0"]
+    B --> E["avanzar(1, 2): caso base, pasoSegmento, produce q1"]
+    C --> F["avanzar(2, 3): caso base, pasoSegmento, produce q2"]
+    C --> G["avanzar(3, 4): caso base, pasoSegmento, produce q3"]
+    D --> H["concatenacion: Array(q0, q1)"]
+    E --> H
+    F --> I["concatenacion: Array(q2, q3)"]
+    G --> I
+    H --> J["concatenacion final: Array(q0, q1, q2, q3)"]
+    I --> J
+```
+
+Los dos hijos de cada nodo se ejecutan con `parallel`; las hojas son llamados a
+`pasoSegmento`. Cada hoja resuelve un tramo distinto:
+
+| Hoja | Tramo | Partículas que mueve | Resultado parcial |
+|------|-------|----------------------|-------------------|
+| avanzar(0, 1) | [0, 1) | p0 | Array(q0) |
+| avanzar(1, 2) | [1, 2) | p1 | Array(q1) |
+| avanzar(2, 3) | [2, 3) | p2 | Array(q2) |
+| avanzar(3, 4) | [3, 4) | p3 | Array(q3) |
+
+La combinación sube por el árbol: `Array(q0) ++ Array(q1)` y
+`Array(q2) ++ Array(q3)` en el primer nivel, y luego
+`Array(q0, q1) ++ Array(q2, q3)` en la raíz. El resultado final es
+`Array(q0, q1, q2, q3)`, idéntico al de `pasoSecuencial(s, 0.5)`.
+
+### 1.5 El umbral controla la profundidad del reparto
+
+Con el mismo sistema y `umbral = 2`, el reparto se detiene antes:
+
+```text
+pasoParalelo(s, 0.5, 2)
+  u = 2
+  avanzar(0, 4): L = 4 > 2, mitad = 2
+    parallel(
+      avanzar(0, 2): L = 2 <= 2 -> pasoSegmento(s, 0.5, 0, 2) -> Array(q0, q1)
+      avanzar(2, 4): L = 2 <= 2 -> pasoSegmento(s, 0.5, 2, 4) -> Array(q2, q3)
+    )
+    izq ++ der -> Array(q0, q1, q2, q3)
+```
+
+Solo hay un nivel de `parallel` y dos hojas de dos elementos cada una. El
+resultado es el mismo; lo único que cambia es la granularidad del reparto.
+
+Con `umbral = 4` (igual al tamaño del sistema), `avanzar(0, 4)` entra directo al
+caso base: no se crea ninguna tarea y el cálculo es exactamente el de
+`pasoSecuencial`. Este es el caso de control que pide el punto 5.
+
+Con el sistema vacío, `avanzar(0, 0)` tiene `L = 0 <= u`, llama a
+`pasoSegmento(s, dt, 0, 0)` y `Array.tabulate(0)` produce un arreglo vacío.
+
+## 2. Punto 2: magnitudes globales
+
+Las tres funciones recorren el sistema con `foldLeft`, que lleva un acumulador
+de izquierda a derecha: parte de un valor inicial y lo actualiza con cada
+partícula, en orden de índice. El sistema de ejemplo es el mismo de la sección 1.
+
+### 2.1 `masaTotal`
+
+```scala
+def masaTotal(s: Sistema): Double = {
+  s.foldLeft(0.0)((acc, p) => acc + p.masa)
+}
+```
+
+Paso a paso: el acumulador empieza en `0.0` y a cada partícula le suma su masa.
+
+```text
+masaTotal(s)
+  acc = 0.0
+  p0: acc = 0.0 + 2.0 = 2.0
+  p1: acc = 2.0 + 1.0 = 3.0
+  p2: acc = 3.0 + 1.0 = 4.0
+  p3: acc = 4.0 + 4.0 = 8.0
+  resultado: 8.0
+```
+
+Con el arreglo vacío, `foldLeft` devuelve el inicial: `0.0`.
+
+### 2.2 `energiaSecuencial`
+
+```scala
+def energiaSecuencial(s: Sistema): Double = {
+  s.foldLeft(0.0) { (acc, p) =>
+    val v = p.vel.norma
+    acc + 0.5 * p.masa * v * v
+  }
+}
+```
+
+Paso a paso, por cada partícula:
+
+1. Calcula `v`, la norma de la velocidad: `Math.sqrt(x * x + y * y)`.
+2. Calcula el aporte de energía cinética: `0.5 * masa * v * v`.
+3. Suma el aporte al acumulador, que empieza en `0.0`.
+
+Aportes del ejemplo:
+
+| Partícula | vel | norma v | aporte 0.5 por masa por v por v |
+|-----------|------|---------|----------------------------------|
+| p0 | (3, 4)  | 5.0 | 0.5 por 2.0 por 25.0 = 25.0 |
+| p1 | (0, 2)  | 2.0 | 0.5 por 1.0 por 4.0 = 2.0    |
+| p2 | (1, 0)  | 1.0 | 0.5 por 1.0 por 1.0 = 0.5    |
+| p3 | (0, -2) | 2.0 | 0.5 por 4.0 por 4.0 = 8.0    |
+
+Traza del acumulador:
+
+```text
+energiaSecuencial(s)
+  acc = 0.0
+  p0: v = sqrt(9 + 16) = 5.0, acc = 0.0 + 25.0 = 25.0
+  p1: v = sqrt(0 + 4)  = 2.0, acc = 25.0 + 2.0 = 27.0
+  p2: v = sqrt(1 + 0)  = 1.0, acc = 27.0 + 0.5 = 27.5
+  p3: v = sqrt(0 + 4)  = 2.0, acc = 27.5 + 8.0 = 35.5
+  resultado: 35.5
+```
+
+```mermaid
+flowchart LR
+    A["acc = 0.0"] -->|"p0 aporta 25.0"| B["acc = 25.0"]
+    B -->|"p1 aporta 2.0"| C["acc = 27.0"]
+    C -->|"p2 aporta 0.5"| D["acc = 27.5"]
+    D -->|"p3 aporta 8.0"| E["acc = 35.5"]
+```
+
+Con el arreglo vacío el resultado es `0.0`: la suma sin términos es el inicial.
+
+### 2.3 `centroDeMasaSecuencial`
+
+```scala
+def centroDeMasaSecuencial(s: Sistema): Vector2 = {
+  val m = masaTotal(s)
+  if (m == 0.0) Vector2(0.0, 0.0)
+  else {
+    val suma = s.foldLeft(Vector2(0.0, 0.0))((acc, p) => acc + p.pos * p.masa)
+    suma * (1.0 / m)
+  }
+}
+```
+
+Paso a paso:
+
+1. Llama a `masaTotal(s)` para obtener la masa total `m`. En el ejemplo, `m = 8.0`
+   (traza de la sección 3.1).
+2. Si `m == 0.0`, devuelve el origen `Vector2(0.0, 0.0)` y termina. Esto cubre el
+   sistema vacío y cualquier sistema cuya masa total sea cero.
+3. Si no, acumula la suma ponderada de posiciones: el acumulador es un `Vector2`
+   que empieza en `(0.0, 0.0)` y a cada paso suma `p.pos * p.masa`.
+4. Escala la suma por `1.0 / m`, lo que divide cada componente entre la masa
+   total. La división se hace una sola vez, al final.
+
+Traza con el ejemplo (`m = 8.0`, distinto de cero):
+
+```text
+centroDeMasaSecuencial(s)
+  m = masaTotal(s) = 8.0
+  suma = (0.0, 0.0)
+  p0: pos * masa = (1, 2) * 2.0  = (2.0, 4.0),   suma = (2.0, 4.0)
+  p1: pos * masa = (4, 0) * 1.0  = (4.0, 0.0),   suma = (6.0, 4.0)
+  p2: pos * masa = (-2, 6) * 1.0 = (-2.0, 6.0),  suma = (4.0, 10.0)
+  p3: pos * masa = (0, -4) * 4.0 = (0.0, -16.0), suma = (4.0, -6.0)
+  resultado = (4.0, -6.0) * (1.0 / 8.0) = (0.5, -0.75)
+```
+
+Con el sistema vacío: `masaTotal` devuelve `0.0`, la rama `m == 0.0` se activa y
+el resultado es `(0.0, 0.0)` sin recorrer nada más.
+
+## 2.4. Resumen del flujo de datos
+
+- `pasoSecuencial` delega en `pasoSegmento` sobre `[0, n)`; un solo recorrido.
+- `pasoParalelo` descompone `[0, n)` en tramos disjuntos que `pasoSegmento`
+  resuelve en las hojas; `++` combina los arreglos parciales en orden.
+- `masaTotal` y `energiaSecuencial` son pliegues con acumulador escalar y valor
+  inicial `0.0`.
+- `centroDeMasaSecuencial` reutiliza `masaTotal`, pliega con acumulador vectorial
+  y divide una sola vez al final; con masa total cero devuelve el origen.
+
+Las dos versiones del paso producen el mismo arreglo sobre el mismo ejemplo, y
+el informe de corrección argumenta por qué ocurre lo mismo para cualquier
+sistema, cualquier `dt` y cualquier umbral.
+
 ## Punto 3: las magnitudes globales en paralelo
 
 Las dos funciones del punto 3 tienen la misma forma: una función interna que
