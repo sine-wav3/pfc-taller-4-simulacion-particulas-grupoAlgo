@@ -560,20 +560,26 @@ sobre $k$.
 **Caso base:** $k \le c$. `camino(k)` devuelve $k = D(k, c)$.
 
 **Caso de inducción:** $k > c \ge 1$, así que $k \ge 2$ y
-$\lfloor k/2 \rfloor \le \lceil k/2 \rceil < k$. Vale la hipótesis de
-inducción para los dos.
+$\lfloor k/2 \rfloor \le \lceil k/2 \rceil < k$. Vale la hipótesis de inducción
+para los dos.
 
-- Si $k$ es par, $\lfloor k/2 \rfloor = \lceil k/2 \rceil = k/2$ y el máximo
-  de un valor consigo mismo es ese valor:
-  ```math
-  \text{camino}(k) \rightarrow 1 + \text{camino}(k/2) \overset{HI}{=} 1 + D(k/2, c) = D(k, c)
-  ```
+- Si $k$ es par, $\lfloor k/2 \rfloor = \lceil k/2 \rceil = k/2$ y el máximo de
+  un valor consigo mismo es ese valor:
+
+  $$
+  \text{camino}(k) = 1 + \text{camino}(k/2)
+  \overset{\text{HI}}{=} 1 + D(k/2, c) = D(k, c)
+  $$
+
 - Si $k$ es impar, `tramo / 2` $= \lfloor k/2 \rfloor$ y
   `tramo - tramo / 2` $= \lceil k/2 \rceil$:
-  ```math
-  \text{camino}(k) \rightarrow 1 + \max(\text{camino}(\lfloor k/2 \rfloor), \text{camino}(\lceil k/2 \rceil))
-  \overset{HI}{=} D(k, c)
-  ```
+
+  $$
+  \text{camino}(k) = 1 + \max\big(\text{camino}(\lfloor k/2 \rfloor),\,
+  \text{camino}(\lceil k/2 \rceil)\big)
+  \overset{\text{HI}}{=} 1 + \max\big(D(\lfloor k/2 \rfloor, c),\,
+  D(\lceil k/2 \rceil, c)\big) = D(k, c)
+  $$
 
 **Terminación:** cada llamado recibe un tramo estrictamente menor que $k$, y
 los tramos son naturales.
