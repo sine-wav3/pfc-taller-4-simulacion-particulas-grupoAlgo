@@ -522,29 +522,29 @@ tolerancia de $10^{-6}$ y no con igualdad exacta.
 
 ## Punto 4: trabajo y profundidad
 
-### El modelo
+## El modelo
 
-Las funciones describen el árbol de llamados de `repartir` sobre $n$
-partículas con $c = \max(\text{umbral}, 1)$. Un tramo de tamaño $k > c$ se
-parte en $\lfloor k/2 \rfloor$ a la izquierda y $\lceil k/2 \rceil$ a la
-derecha, porque $m - d = \lfloor k/2 \rfloor$. Un tramo $k \le c$ es una hoja
-y cuesta $k$ operaciones.
+Las funciones describen el árbol de llamados de `repartir` sobre $n$ partículas
+con $c = \max(\text{umbral}, 1)$. Un tramo de tamaño $k > c$ se parte en
+$\lfloor k/2 \rfloor$ a la izquierda y $\lceil k/2 \rceil$ a la derecha, porque
+$m - d = \lfloor k/2 \rfloor$. Un tramo $k \le c$ es una hoja y cuesta $k$
+operaciones.
 
 - **Trabajo** $W(n)$: las operaciones de todas las hojas.
-- **Profundidad** $D(n, c)$: el costo del camino más caro de la raíz a una
-  hoja, con 1 por cada partición y el tamaño de la hoja al final.
+- **Profundidad** $D(n, c)$: el costo del camino más caro de la raíz a una hoja,
+  con 1 por cada partición y el tamaño de la hoja al final.
 
-```math
+$$
 D(k, c) =
 \begin{cases}
 k & \text{si } k \le c \\
 1 + \max\big(D(\lfloor k/2 \rfloor, c),\; D(\lceil k/2 \rceil, c)\big) & \text{si } k > c
 \end{cases}
-```
+$$
 
-```math
+$$
 T_p(n, c) = D(n, c) + \frac{W(n)}{p}
-```
+$$
 
 ### `trabajo` es correcto
 
