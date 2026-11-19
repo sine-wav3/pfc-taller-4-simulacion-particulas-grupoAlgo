@@ -153,6 +153,34 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(pasoParalelo(Array(p), 1.0, 0).length == 1)
   }
 
+  // pasoParalelo prubeas propuestas -------------------------------------------
+
+  test("pasoParalelo: sobre el sistema vacío devuelve vacío") {
+    assert(pasoParalelo(vacio, 1.0, 1).isEmpty && pasoParalelo(vacio, 1.0, 100).isEmpty)
+  }
+
+  test("pasoParalelo: sistema de dos partículas con umbral 1 (una partición)") {
+    assert(pasoParalelo(s, 2.0, 1).map(_.pos).toList == List(Vector2(6.0, 8.0), Vector2(4.0, 0.0)))
+  }
+
+  test("pasoParalelo: con dt cero conserva todas las posiciones") {
+    assert(pasoParalelo(grande, 0.0, 10)
+      .zip(grande)
+      .forall { case (a, b) => cerca(a.pos, b.pos) })
+  }
+
+  test("pasoParalelo: un dt negativo retrocede las posiciones") {
+    assert(pasoParalelo(grande, -1.0, 25)
+      .zip(grande)
+      .forall { case (a, b) => cerca(a.pos, b.pos + b.vel * -1.0) })
+  }
+
+  test("pasoParalelo: la velocidad y la masa no cambian") {
+    assert(pasoParalelo(grande, 3.0, 50)
+      .zip(grande)
+      .forall { case (a, b) => a.vel == b.vel && a.masa == b.masa })
+  }
+
   // Punto 2 -------------------------------------------------------------------
 
   test("energiaSecuencial: media masa por velocidad al cuadrado") {
