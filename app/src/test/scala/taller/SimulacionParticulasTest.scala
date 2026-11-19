@@ -39,6 +39,7 @@ class SimulacionParticulasTest extends AnyFunSuite {
 
   // Punto 1 -------------------------------------------------------------------
 
+  // Punto 1: Paso secuencial --------------------------------------------------
   test("pasoSecuencial: la posición avanza velocidad por dt") {
     assert(pasoSecuencial(Array(p), 2.0).head.pos == Vector2(2.0, 4.0))
   }
@@ -56,6 +57,45 @@ class SimulacionParticulasTest extends AnyFunSuite {
     assert(pasoSecuencial(vacio, 1.0).isEmpty)
   }
 
+  // Paso secuencial pruebas propuestas ----------------------------------------
+
+  test("pasoSecuencial: un dt negativo retrocede la posición") {
+    val q = Particula(Vector2(5, 5), Vector2(1, -1), 2.0)
+    assert(pasoSecuencial(Array(q), -2.0).head.pos == Vector2(3.0, 7.0))
+  }
+
+  test("pasoSecuencial: parte de una posición inicial distinta del origen y usa dt fraccionario") {
+    val q = Particula(Vector2(10, -4), Vector2(6, 8), 1.0)
+    assert(pasoSecuencial(Array(q), 0.5).head.pos == Vector2(13.0, 0.0))
+  }
+
+  test("pasoSecuencial: cada partícula se mueve con su propia velocidad") {
+    val a = Particula(Vector2(0, 0), Vector2(1, 0), 1.0)
+    val b = Particula(Vector2(0, 0), Vector2(0, 3), 1.0)
+    val c = Particula(Vector2(2, 2), Vector2(-1, -1), 1.0)
+    val r = pasoSecuencial(Array(a, b, c), 2.0)
+    assert(r.map(_.pos).toList == List(Vector2(2.0, 0.0), Vector2(0.0, 6.0), Vector2(0.0, 0.0)))
+  }
+
+  test("pasoSecuencial: conserva el tamaño y el orden de las partículas") {
+    val s = Array(
+      Particula(Vector2(0, 0), Vector2(0, 0), 1.0),
+      Particula(Vector2(1, 1), Vector2(0, 0), 2.0),
+      Particula(Vector2(2, 2), Vector2(0, 0), 3.0),
+      Particula(Vector2(3, 3), Vector2(0, 0), 4.0)
+    )
+    val r = pasoSecuencial(s, 7.0)
+    assert(r.length == 4 && r.map(_.masa).toList == List(1.0, 2.0, 3.0, 4.0))
+  }
+
+  test("pasoSecuencial: no modifica el sistema original") {
+    val q = Particula(Vector2(1, 1), Vector2(2, 2), 1.0)
+    val s = Array(q)
+    pasoSecuencial(s, 5.0)
+    assert(s.head.pos == Vector2(1.0, 1.0))
+  }
+
+  // Paso segmento pruebas implementadas ------------------------------------------------
   test("pasoSegmento: solo calcula el tramo pedido") {
     val tramo = pasoSegmento(s, 1.0, 1, 2)
     assert(tramo.length == 1 && tramo.head.pos == Vector2(4.0, 0.0))
