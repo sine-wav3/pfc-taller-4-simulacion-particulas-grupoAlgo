@@ -40,8 +40,9 @@ class SimulacionParticulas {
    * elementos que el umbral, y por debajo de esa cifra resuelve en secuencial.
    */
   def pasoParalelo(s: Sistema, dt: Double, umbral: Int): Sistema = {
+    val u = math.max(umbral, 1)
     def avanzar(desde: Int, hasta: Int): Sistema =
-      if (hasta - desde <= umbral) pasoSegmento(s, dt, desde, hasta) // caso base verifica que el tramo
+      if (hasta - desde <= u) pasoSegmento(s, dt, desde, hasta) // caso base verifica que el tramo
         // hasta - desde es menor o igual a umnbral lo devuelve a pasoSegmento
       else {
         val mitad = desde + (hasta - desde) / 2 // se parte a la mitad y las dos mitades
