@@ -1,6 +1,7 @@
 package taller
 
 import common._
+import org.scalameter._
 
 /**
  * Taller 4 — simulación de partículas repartida entre varios núcleos.
@@ -178,13 +179,10 @@ class SimulacionParticulas {
 
     // Punto 5: medir la aceleración ---------------------------------------------
 
-    /** Mediana de varias corridas, en milisegundos, tras una de calentamiento. */
+  /** Mediana de varias mediciones de ScalaMeter, en milisegundos. */
     def medir[A](repeticiones: Int)(cuerpo: => A): Double = {
-      cuerpo
       val muestras = Vector.fill(repeticiones) {
-        val inicio = System.nanoTime()
-        cuerpo
-        (System.nanoTime() - inicio) / 1e6
+        (withWarmer(new Warmer.Default) measure { cuerpo }).value
       }
       muestras.sorted.apply(muestras.length / 2)
     }
