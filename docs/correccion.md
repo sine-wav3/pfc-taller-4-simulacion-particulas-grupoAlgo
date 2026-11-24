@@ -632,17 +632,17 @@ La especificación matemática de las funciones solicitadas es la siguiente:
 
 $$
 \begin{aligned}
-\texttt{medir}(r)(f) &= \operatorname{med}(t_1, \ldots, t_r) \\[10pt]
+\texttt{medir}(r)(f) &= \mathrm{med}(t_1, \ldots, t_r) \\[10pt]
 \texttt{aceleracion}(T_s, T_p) &= \frac{T_s}{T_p} \\[10pt]
 \texttt{umbralConveniente}(s, dt, U) &=
 \begin{cases}
-\arg\min_{u \in U} \; \texttt{medir}(5)\big(\texttt{pasoParalelo}(s, dt, u)\big) & \text{si } U \ne \varnothing \\
-n & \text{si } U = \varnothing
+\arg\min_{u \in U} \; \texttt{medir}(5)\big(\texttt{pasoParalelo}(s, dt, u)\big) & \text{si } U \ne \emptyset \\
+n & \text{si } U = \emptyset
 \end{cases}
 \end{aligned}
 $$
 
-donde $n = \lvert s \rvert$ y $\operatorname{med}$ es la mediana de la muestra ordenada.
+donde $n = \lvert s \rvert$ y $\mathrm{med}$ es la mediana de la muestra ordenada.
 
 ---
 
@@ -661,9 +661,9 @@ En ambos casos, el resultado es un elemento de la propia muestra, no un valor in
 **Por qué la mediana y no el promedio.** La mediana es robusta: no se altera si una cantidad menor a la mitad de las muestras es atípica. El promedio, en cambio, sí lo hace. Dadas las muestras $(10, 10, 11, 10, 95)$, donde el $95$ representa una pausa del recolector de basura:
 
 $$
-\operatorname{med} = 10
+\mathrm{med} = 10
 \qquad
-\text{promedio} = \tfrac{10 + 10 + 11 + 10 + 95}{5} = 27{,}2
+\text{promedio} = \frac{10 + 10 + 11 + 10 + 95}{5} = 27{,}2
 $$
 
 Las mediciones de tiempo tienen cola larga hacia la derecha, porque una ejecución solo puede retrasarse por interferencia, pero nunca adelantarse. Por esto, la mediana estima mejor el tiempo típico.
@@ -688,7 +688,7 @@ S < 1 &\iff T_p > T_s && \text{(la versión paralela es más lenta)}
 \end{aligned}
 $$
 
-*Demostración.* Como $T_p > 0$, multiplicar por $T_p$ conserva el sentido de las desigualdades, cumpliéndose que $S \gtrless 1 \iff T_s \gtrless T_p$.
+*Demostración.* Como $T_p > 0$, multiplicar por $T_p$ conserva el sentido de las desigualdades; por eso, comparar $S$ con $1$ equivale a comparar $T_s$ con $T_p$.
 
 **Dominio.** Si $T_p = 0$, el cociente no está definido (en `Double` resulta en `Infinity`). ScalaMeter mide con resolución de nanosegundos y las muestras son estrictamente positivas para cargas reales, por lo que este caso no se presenta en la práctica.
 
@@ -710,7 +710,7 @@ La aceleración no puede superar el número de procesadores $p$, ni tampoco $n /
 
 ### 5.3 Corrección de `umbralConveniente`
 
-**Lema 3 (Pertenencia al conjunto de candidatos).** Si $U \ne \varnothing$, el resultado pertenece a $U$.
+**Lema 3 (Pertenencia al conjunto de candidatos).** Si $U \ne \emptyset$, el resultado pertenece a $U$.
 
 *Demostración.* La función `minBy` devuelve un elemento de la colección sobre la cual se aplica, en este caso, el conjunto $U$.
 
@@ -720,7 +720,7 @@ Si hay empate, `minBy` devuelve el primer candidato de la lista que alcanza dich
 
 *Demostración.* Corresponde a la especificación de `minBy`: recorre la lista, conserva el candidato con menor valor de $\tau$ y lo reemplaza solo ante un valor estrictamente menor.
 
-**Caso de lista vacía.** Si $U = \varnothing$, no existe mínimo y el código devuelve $n$. Esta es la elección natural: con un umbral $c = \max(n, 1) \ge n$, la raíz del árbol cumple $h - d = n \le c$, comportándose como una hoja. En consecuencia, `pasoParalelo` no reparte el trabajo y equivale a `pasoSegmento(s, dt, 0, n)` (es decir, a la versión secuencial). Para $n = 0$, $\max(0, 1) = 1 \ge 0$ también produce una hoja, manteniendo la consistencia.
+**Caso de lista vacía.** Si $U = \emptyset$, no existe mínimo y el código devuelve $n$. Esta es la elección natural: con un umbral $c = \max(n, 1) \ge n$, la raíz del árbol cumple $h - d = n \le c$, comportándose como una hoja. En consecuencia, `pasoParalelo` no reparte el trabajo y equivale a `pasoSegmento(s, dt, 0, n)` (es decir, a la versión secuencial). Para $n = 0$, $\max(0, 1) = 1 \ge 0$ también produce una hoja, manteniendo la consistencia.
 
 **Lema 5 (Independencia del resultado respecto al umbral).** Para todo $u \in U$, `pasoParalelo(s, dt, u)` devuelve el mismo arreglo.
 
@@ -748,4 +748,4 @@ Las dos versiones comparadas realizan el mismo trabajo por partícula, utilizand
 |---|---|---|
 | `medir(r)(f)` | Mediana de $r$ muestras | $t_{(\lfloor r/2 \rfloor + 1)}$. Robusta a valores atípicos (requiere $r \ge 1$). |
 | `aceleracion(T_s, T_p)` | $T_s / T_p$ | $S > 1 \iff$ el paralelo gana. Cota teórica: $S_{\text{modelo}} < p$. |
-| `umbralConveniente(s, dt, U)` | $\arg\min_{u \in U} \tau(u)$ | Pertenece a $U$ y minimiza lo medido. Si $U = \varnothing$, devuelve $n$ (fuerza ejecución secuencial). |
+| `umbralConveniente(s, dt, U)` | $\arg\min_{u \in U} \tau(u)$ | Pertenece a $U$ y minimiza lo medido. Si $U = \emptyset$, devuelve $n$ (fuerza ejecución secuencial). |
