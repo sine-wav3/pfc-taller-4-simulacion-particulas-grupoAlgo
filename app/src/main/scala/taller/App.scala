@@ -13,44 +13,54 @@ import scala.util.Random
 object App {
 
   /** Sistema reproducible: misma semilla, mismas partículas. */
-  def sistemaAleatorio(n: Int, semilla: Long): Array[Particula] = {
-    val r = new Random(semilla)
-    Array.fill(n)(Particula(
-      Vector2(r.nextDouble() * 100, r.nextDouble() * 100),
-      Vector2(r.nextDouble() * 2 - 1, r.nextDouble() * 2 - 1),
-      1.0 + r.nextDouble() * 9))
-  }
 
-  def fmt(x: Double): String = "%.2f".formatLocal(java.util.Locale.US, x)
-
-  /**
+  /** def sistemaAleatorio(n: Int, semilla: Long): Array[Particula] = {
+   * val r = new Random(semilla)
+   * Array.fill(n)(Particula(
+   * Vector2(r.nextDouble() * 100, r.nextDouble() * 100),
+   * Vector2(r.nextDouble() * 2 - 1, r.nextDouble() * 2 - 1),
+   * 1.0 + r.nextDouble() * 9))
+   * }
+   *
+   * def fmt(x: Double): String = "%.2f".formatLocal(java.util.Locale.US, x)
+   *
+   * /**
    * Cuántos hilos distintos ejecutan tareas lanzadas con `parallel`. Si da 1,
    * el reparto corre en un solo hilo y ninguna aceleración sería real.
+   * */
+   * def hilosDistintos(n: Int): Int = {
+   * val vistos = ConcurrentHashMap.newKeySet[String]()
+   * def sondeo(desde: Int, hasta: Int): Double = {
+   * vistos.add(Thread.currentThread.getName)
+   * if (hasta - desde <= 1000) {
+   * var i = desde
+   * var acc = 0.0
+   * while (i < hasta) { acc += math.sqrt(i.toDouble); i += 1 }
+   * acc
+   * } else {
+   * val m = desde + (hasta - desde) / 2
+   * val (a, b) = parallel(sondeo(desde, m), sondeo(m, hasta))
+   * a + b
+   * }
+   * }
+   * sondeo(0, n)   // el resultado se devuelve y se suma, así el JIT no lo elimina
+   * vistos.size
+   * }
    */
-  def hilosDistintos(n: Int): Int = {
-    val vistos = ConcurrentHashMap.newKeySet[String]()
-    def sondeo(desde: Int, hasta: Int): Double = {
-      vistos.add(Thread.currentThread.getName)
-      if (hasta - desde <= 1000) {
-        var i = desde
-        var acc = 0.0
-        while (i < hasta) { acc += math.sqrt(i.toDouble); i += 1 }
-        acc
-      } else {
-        val m = desde + (hasta - desde) / 2
-        val (a, b) = parallel(sondeo(desde, m), sondeo(m, hasta))
-        a + b
-      }
-    }
-    sondeo(0, n)   // el resultado se devuelve y se suma, así el JIT no lo elimina
-    vistos.size
-  }
-
   def main(args: Array[String]): Unit = {
     val sim = new SimulacionParticulas()
     import sim._
 
-    val dt = 0.5
+    val sistema: Sistema = Array(
+      Particula(Vector2(0, 0), Vector2(1, 1), 1.0),
+      Particula(Vector2(2, 0), Vector2(0, 1), 2.0))
+
+    println(s"Núcleos disponibles: ${Runtime.getRuntime.availableProcessors}")
+    println(pasoSecuencial(sistema, 0.5).mkString(", "))
+  }
+}
+
+  /**  val dt = 0.5
     val semilla = 42L
     val repeticiones = 5
     val p = Runtime.getRuntime.availableProcessors
@@ -86,12 +96,12 @@ object App {
         println(s"| $etiqueta | ${fmt(tPar)} | ${fmt(acel)} | ${fmt(est)} |")
       }
       println()
-    }
+    }*/
 
-    // umbralConveniente sobre el último tamaño.
+    /** umbralConveniente sobre el último tamaño.
     val n = tamanos.last
     val s = sistemaAleatorio(n, semilla)
     val candidatos = List(n / 8, n / 64, n / 512, 10000, 1000, 100)
     println(s"umbralConveniente para n = $n con $candidatos: ${umbralConveniente(s, dt, candidatos)}")
-  }
-}
+  }*/
+
