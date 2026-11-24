@@ -495,4 +495,29 @@ class SimulacionParticulasTest extends AnyFunSuite {
     val candidatos = List(16, 128, 1024)
     assert(candidatos.contains(umbralConveniente(grande, 0.5, candidatos)))
   }
+
+  // Punto 5: pruebas propias----------------------------------------------------------
+
+  test("aceleracion: el paralelo tarda la mitad") {
+    assert(cerca(aceleracion(80.0, 40.0), 2.0))
+  }
+
+  test("aceleracion: el paralelo tarda diez veces menos") {
+    assert(cerca(aceleracion(500.0, 50.0), 10.0))
+  }
+
+  test("aceleracion: el paralelo es más lento") {
+    assert(cerca(aceleracion(40.0, 80.0), 0.5))
+  }
+
+  test("umbralConveniente: con un solo candidato devuelve ese candidato") {
+    assert(umbralConveniente(grande, 0.5, List(64)) == 64)
+  }
+
+  test("umbralConveniente: con candidatos negativos y positivos devuelve uno de ellos") {
+    val candidatos = List(-2, 0, 32, 128)
+    assert(candidatos.contains(umbralConveniente(grande, 0.5, candidatos)))
+  }
 }
+
+
