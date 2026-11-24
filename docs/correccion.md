@@ -622,44 +622,43 @@ que $1000 / 3$ dé $333{,}\overline{3}$ y no $333$. Como $D$ no depende de $p$
 y $n/p$ baja cuando $p$ sube, la estimación nunca empeora al agregar
 procesadores.
 
-## Punto 5: medición, aceleración y umbral conveniente
+## Punto 5: Medición, aceleración y umbral conveniente
 
 ### Especificación
 
 Sea $T(f)$ el tiempo de ejecución de un cuerpo $f$, en milisegundos, medido por ScalaMeter con el calentador `Warmer.Default`. Cada medición produce una muestra $t \in \mathbb{R}_{>0}$, y entre muestras hay variación por el JIT, el recolector de basura y la carga de la máquina.
 
-Lo que piden las funciones es:
+La especificación matemática de las funciones solicitadas es la siguiente:
 
 $$
-\texttt{medir}(r)(f) = \operatorname{med}(t_1, \ldots, t_r)
-\qquad
-\texttt{aceleracion}(T_s, T_p) = \frac{T_s}{T_p}
-$$
-
-$$
-\texttt{umbralConveniente}(s, dt, U) =
+\begin{aligned}
+\texttt{medir}(r)(f) &= \operatorname{med}(t_1, \ldots, t_r) \\[10pt]
+\texttt{aceleracion}(T_s, T_p) &= \frac{T_s}{T_p} \\[10pt]
+\texttt{umbralConveniente}(s, dt, U) &=
 \begin{cases}
 \arg\min_{u \in U} \; \texttt{medir}(5)\big(\texttt{pasoParalelo}(s, dt, u)\big) & \text{si } U \ne \varnothing \\
 n & \text{si } U = \varnothing
 \end{cases}
+\end{aligned}
 $$
 
-con $n = \lvert s \rvert$ y $\operatorname{med}$ la mediana de la muestra ordenada.
+donde $n = \lvert s \rvert$ y $\operatorname{med}$ es la mediana de la muestra ordenada.
+
+---
 
 ### 5.1 Corrección de `medir`
 
-**Precondición.** Se requiere $r \ge 1$. Con $r = 0$ el vector `muestras` es vacío y `apply(0)` lanza una excepción, porque no existe mediana de una muestra vacía.
+**Precondición.** Se requiere $r \ge 1$. Con $r = 0$, el vector `muestras` es vacío y la operación `apply(0)` lanza una excepción, dado que no existe la mediana de una muestra vacía.
 
-**Lema 1 (la mediana).** Sea $t_{(1)} \le t_{(2)} \le \cdots \le t_{(r)}$ la muestra ordenada, que es lo que construye `muestras.sorted`. El código devuelve $t_{(k+1)}$ con $k = \lfloor r/2 \rfloor$ (la posición $k$ en base 0).
+**Lema 1 (Cálculo de la mediana).** Sea $t_{(1)} \le t_{(2)} \le \cdots \le t_{(r)}$ la muestra ordenada, que es exactamente lo que construye `muestras.sorted`. El código devuelve $t_{(k+1)}$ con $k = \lfloor r/2 \rfloor$ (la posición $k$ en base 0).
 
-*Demostración.* `Vector.fill(r)(...)` evalúa el cuerpo $r$ veces, así que `muestras` tiene longitud $r$. Después de `sorted`, `apply(r/2)` usa la división entera de Scala, que sobre naturales es el piso. Por lo tanto:
+*Demostración.* `Vector.fill(r)(...)` evalúa el cuerpo $r$ veces, por lo que `muestras` tiene longitud $r$. Después de `sorted`, `apply(r/2)` usa la división entera de Scala, que sobre naturales equivale al piso. Por lo tanto:
+- Si $r = 2k + 1$ es impar, $\lfloor r/2 \rfloor = k$. La posición $k$ deja exactamente $k$ muestras a su izquierda y $k$ a su derecha, correspondiendo a la mediana exacta.
+- Si $r = 2k$ es par, $\lfloor r/2 \rfloor = k$ y se devuelve la mediana superior $t_{(k+1)}$. Esta es una convención válida, ya que la mediana de una cantidad par de datos no es única.
 
-- Si $r = 2k + 1$ es impar, $\lfloor r/2 \rfloor = k$ y la posición $k$ deja $k$ muestras a cada lado, así que es la mediana exacta.
-- Si $r = 2k$ es par, $\lfloor r/2 \rfloor = k$ y se devuelve la mediana superior $t_{(k+1)}$. Es una convención válida, porque la mediana de una cantidad par de datos no es única.
+En ambos casos, el resultado es un elemento de la propia muestra, no un valor interpolado.
 
-En ambos casos el resultado es un elemento de la propia muestra, no un valor interpolado. $\blacksquare$
-
-**Por qué la mediana y no el promedio.** La mediana no se mueve cuando una cantidad menor que la mitad de las muestras es atípica. El promedio sí lo hace. Con las muestras $(10, 10, 11, 10, 95)$, donde el 95 es una pausa del recolector de basura:
+**Por qué la mediana y no el promedio.** La mediana es robusta: no se altera si una cantidad menor a la mitad de las muestras es atípica. El promedio, en cambio, sí lo hace. Dadas las muestras $(10, 10, 11, 10, 95)$, donde el $95$ representa una pausa del recolector de basura:
 
 $$
 \operatorname{med} = 10
@@ -667,86 +666,86 @@ $$
 \text{promedio} = \tfrac{10 + 10 + 11 + 10 + 95}{5} = 27{,}2
 $$
 
-Las mediciones de tiempo tienen cola larga hacia arriba, porque una ejecución solo puede retrasarse por interferencia y nunca adelantarse. Por eso la mediana estima mejor el tiempo típico.
+Las mediciones de tiempo tienen cola larga hacia la derecha, porque una ejecución solo puede retrasarse por interferencia, pero nunca adelantarse. Por esto, la mediana estima mejor el tiempo típico.
 
-**Efecto del calentador.** `withWarmer(new Warmer.Default)` ejecuta el cuerpo varias veces antes de medir, para que la JVM compile y optimice el código. Sin él, las primeras muestras mezclarían interpretación con código compilado y el resultado no sería comparable entre `pasoSecuencial` y `pasoParalelo`.
+**Efecto del calentador.** `withWarmer(new Warmer.Default)` ejecuta el cuerpo varias veces antes de medir, permitiendo que la JVM compile y optimice el código (JIT). Sin él, las primeras muestras mezclarían interpretación con código compilado, haciendo que el resultado no fuera comparable entre `pasoSecuencial` y `pasoParalelo`.
 
-**Evaluación por nombre.** El parámetro `cuerpo: => A` es por nombre, así que se reevalúa en cada muestra y en cada repetición del calentador. Si fuera por valor, se ejecutaría una sola vez y se mediría el costo de leer un resultado ya calculado.
+**Evaluación por nombre.** El parámetro `cuerpo: => A` es *call-by-name* (por nombre), por lo que se reevalúa en cada muestra y en cada repetición del calentador. Si fuera por valor, se ejecutaría una sola vez y se estaría midiendo el costo de leer un resultado ya calculado.
+
+---
 
 ### 5.2 Corrección de `aceleracion`
 
 **Definición.** Para $T_s, T_p > 0$:
+$$ S = \frac{T_s}{T_p} $$
 
+**Lema 2 (Interpretación de $S$).**
 $$
-S = \frac{T_s}{T_p}
-$$
-
-**Lema 2 (lectura de $S$).**
-
-- $S > 1 \iff T_p < T_s$: la versión paralela es más rápida.
-- $S = 1 \iff T_p = T_s$: no hay ganancia.
-- $S < 1 \iff T_p > T_s$: la versión paralela es más lenta.
-
-*Demostración.* Como $T_p > 0$, multiplicar por $T_p$ conserva el sentido de las desigualdades, y $S \gtrless 1 \iff T_s \gtrless T_p$. $\blacksquare$
-
-**Dominio.** Si $T_p = 0$ el cociente no está definido (en `Double` da `Infinity`). ScalaMeter mide con resolución de nanosegundos y las muestras son positivas para cargas reales, así que no se espera ese caso.
-
-**Cota con el modelo del punto 4.** Con el modelo $T_p(n, c) = D(n, c) + n/p$ y $T_1 = n$, la aceleración teórica es
-
-$$
-S_{\text{modelo}}(n, p, c) = \frac{n}{D(n, c) + n/p}
+\begin{aligned}
+S > 1 &\iff T_p < T_s && \text{(la versión paralela es más rápida)} \\
+S = 1 &\iff T_p = T_s && \text{(no hay ganancia)} \\
+S < 1 &\iff T_p > T_s && \text{(la versión paralela es más lenta)}
+\end{aligned}
 $$
 
-*Demostración de la cota.* Como $D(n, c) \ge 1$ para $n \ge 1$, el denominador cumple $D + n/p > n/p$, y entonces
+*Demostración.* Como $T_p > 0$, multiplicar por $T_p$ conserva el sentido de las desigualdades, cumpliéndose que $S \gtrless 1 \iff T_s \gtrless T_p$.
+
+**Dominio.** Si $T_p = 0$, el cociente no está definido (en `Double` resulta en `Infinity`). ScalaMeter mide con resolución de nanosegundos y las muestras son estrictamente positivas para cargas reales, por lo que este caso no se presenta en la práctica.
+
+**Cota con el modelo del punto 4.** Usando el modelo $T_p(n, c) = D(n, c) + n/p$ y $T_1 = n$, la aceleración teórica es:
+$$ S_{\text{modelo}}(n, p, c) = \frac{n}{D(n, c) + n/p} $$
+
+*Demostración de la cota.* Dado que $D(n, c) \ge 1$ para $n \ge 1$, el denominador cumple $D(n,c) + n/p > n/p$. Además, como $n/p > 0$, el denominador también es estrictamente mayor que $D(n,c)$. Entonces:
 
 $$
-S_{\text{modelo}} < \frac{n}{n/p} = p
-\qquad
-S_{\text{modelo}} \le \frac{n}{D(n, c)}
+\begin{aligned}
+S_{\text{modelo}} &< \frac{n}{n/p} = p \\[6pt]
+S_{\text{modelo}} &< \frac{n}{D(n, c)}
+\end{aligned}
 $$
 
-$\blacksquare$
+La aceleración no puede superar el número de procesadores $p$, ni tampoco $n / D(n, c)$, que representa el paralelismo disponible del árbol. Esto explica los resultados esperados: con un umbral grande, $D$ se acerca a $n$ y $S \to 1$. Con un umbral muy pequeño, $D$ es pequeña, pero el modelo no contabiliza el costo de crear tareas; por eso, en la práctica, $S$ cae si el umbral es demasiado fino.
 
-La aceleración no puede superar el número de procesadores $p$. Tampoco puede superar $n / D(n, c)$, el paralelismo disponible del árbol. Esto explica los resultados esperados. Con umbral grande, $D$ se acerca a $n$ y $S \to 1$. Con umbral pequeño, $D$ es pequeña, pero el modelo no cuenta el costo de crear tareas, y por eso en la práctica $S$ cae si el umbral es demasiado fino.
+---
 
 ### 5.3 Corrección de `umbralConveniente`
 
-**Lema 3 (el resultado es candidato).** Si $U \ne \varnothing$, el resultado pertenece a $U$.
+**Lema 3 (Pertenencia al conjunto de candidatos).** Si $U \ne \varnothing$, el resultado pertenece a $U$.
 
-*Demostración.* `minBy` devuelve un elemento de la colección sobre la que se aplica, en este caso $U$. $\blacksquare$
+*Demostración.* La función `minBy` devuelve un elemento de la colección sobre la cual se aplica, en este caso, el conjunto $U$.
 
-**Lema 4 (minimalidad).** Sea $\tau(u) = \texttt{medir}(5)\big(\texttt{pasoParalelo}(s, dt, u)\big)$ el valor que `minBy` calcula una vez por candidato. Si $u^*$ es el resultado, entonces
+**Lema 4 (Minimalidad del tiempo medido).** Sea $\tau(u) = \texttt{medir}(5)\big(\texttt{pasoParalelo}(s, dt, u)\big)$ el valor que `minBy` calcula una vez por candidato. Si $u^*$ es el resultado, entonces:
+$$ \tau(u^*) \le \tau(u) \quad \forall\, u \in U $$
+Si hay empate, `minBy` devuelve el primer candidato de la lista que alcanza dicho mínimo.
 
-$$
-\tau(u^*) \le \tau(u) \quad \forall\, u \in U
-$$
+*Demostración.* Corresponde a la especificación de `minBy`: recorre la lista, conserva el candidato con menor valor de $\tau$ y lo reemplaza solo ante un valor estrictamente menor.
 
-Si hay empate, `minBy` devuelve el primer candidato de la lista que lo alcanza.
+**Caso de lista vacía.** Si $U = \varnothing$, no existe mínimo y el código devuelve $n$. Esta es la elección natural: con un umbral $c = \max(n, 1) \ge n$, la raíz del árbol cumple $h - d = n \le c$, comportándose como una hoja. En consecuencia, `pasoParalelo` no reparte el trabajo y equivale a `pasoSegmento(s, dt, 0, n)` (es decir, a la versión secuencial). Para $n = 0$, $\max(0, 1) = 1 \ge 0$ también produce una hoja, manteniendo la consistencia.
 
-*Demostración.* Es la especificación de `minBy`: recorre la lista, conserva el candidato con menor valor de $\tau$ y reemplaza solo ante un valor estrictamente menor. $\blacksquare$
+**Lema 5 (Independencia del resultado respecto al umbral).** Para todo $u \in U$, `pasoParalelo(s, dt, u)` devuelve el mismo arreglo.
 
-**Caso de lista vacía.** Si $U = \varnothing$ no existe mínimo, y el código devuelve $n$. Es la elección natural: con $c = \max(n, 1) \ge n$, el llamado raíz cumple $h - d = n \le c$ y es una hoja. Entonces `pasoParalelo` no reparte nada y equivale a `pasoSegmento(s, dt, 0, n)`, o sea a la versión secuencial. Para $n = 0$, $\max(0, 1) = 1 \ge 0$ también produce una hoja, así que el resultado es consistente.
+*Demostración.* Es una consecuencia directa del Teorema de equivalencia del punto 1.2.4: para todo umbral, `pasoParalelo` produce el mismo resultado que `pasoSecuencial`.
 
-**Lema 5 (elegir el umbral no afecta el resultado).** Para todo $u \in U$, `pasoParalelo(s, dt, u)` devuelve el mismo arreglo.
+Este lema justifica que la selección se haga puramente por tiempo. Cualquier umbral devuelve el mismo sistema; el umbral escogido altera el tiempo de ejecución, pero nunca la respuesta computada.
 
-*Demostración.* Es el Teorema de equivalencia del punto 1.2.4: para todo umbral, `pasoParalelo` devuelve lo mismo que `pasoSecuencial`. $\blacksquare$
+**Alcance de la garantía.** El Lema 4 es exacto sobre los valores medidos $\tau(u)$, no sobre los tiempos verdaderos subyacentes. Como cada $\tau(u)$ es una mediana de 5 muestras con ruido, dos umbrales con tiempos reales muy parecidos podrían quedar en un orden distinto en otra corrida. Por esto, la función devuelve un umbral *conveniente* (óptimo para la muestra) y no un óptimo absoluto demostrable.
 
-Este lema justifica que la selección se haga solo por tiempo. Cualquier umbral devuelve el mismo sistema, y el umbral escogido cambia el tiempo pero nunca la respuesta.
-
-**Alcance de la garantía.** El Lema 4 es exacto sobre los valores medidos $\tau(u)$, no sobre los tiempos verdaderos. Como cada $\tau(u)$ es una mediana de 5 muestras con ruido, dos umbrales con tiempos reales muy parecidos pueden quedar en un orden distinto en otra corrida. Por eso la función devuelve un umbral conveniente y no un óptimo demostrable.
+---
 
 ### 5.4 Comparabilidad y caso de control
 
-Las dos versiones comparadas hacen el mismo trabajo por partícula, con la misma expresión dentro de `pasoSegmento` (sección 1.2.5). Por eso $S$ mide el efecto del reparto y no una diferencia de cálculo. Además:
+Las dos versiones comparadas realizan el mismo trabajo por partícula, utilizando la misma expresión dentro de `pasoSegmento` (sección 1.2.5). Por lo tanto, $S$ mide el efecto neto del reparto de tareas y no diferencias en el cálculo base. Además:
 
-- Con $u \ge n$ el árbol tiene una sola hoja, y se espera $S \approx 1$. Si resulta muy distinto de 1, el ruido de la medición es grande y los demás resultados deben leerse con cuidado.
-- Con $u$ muy pequeño se esperan más tareas de las que los núcleos pueden aprovechar, y $S$ debería bajar, porque el costo de crear y sincronizar tareas domina el trabajo útil.
-- El resultado de `pasoParalelo` se usa solo como valor del cuerpo. Como es un arreglo nuevo y se construye completo, el compilador no puede eliminarlo como código muerto.
+- Con $u \ge n$, el árbol tiene una sola hoja y se espera $S \approx 1$. Si el resultado experimental es muy distinto de 1, indica que el ruido de la medición es alto y los demás resultados deben leerse con cautela.
+- Con $u$ muy pequeño, se generan más tareas de las que los núcleos pueden aprovechar. Se espera que $S$ baje, ya que el costo de crear y sincronizar tareas domina sobre el trabajo útil.
+- El resultado de `pasoParalelo` se usa como valor de retorno del cuerpo. Al ser un arreglo nuevo que se construye por completo, el compilador no puede eliminarlo como código muerto (dead code elimination).
+
+---
 
 ### 5.5 Resumen
 
 | Función | Calcula | Propiedad demostrada |
 |---|---|---|
-| `medir(r)(f)` | mediana de $r$ muestras | $t_{(\lfloor r/2 \rfloor + 1)}$, robusta a valores atípicos (requiere $r \ge 1$) |
-| `aceleracion(T_s, T_p)` | $T_s / T_p$ | $S > 1 \iff$ el paralelo gana; $S_{\text{modelo}} < p$ |
-| `umbralConveniente(s, dt, U)` | $\arg\min_{u \in U} \tau(u)$ | pertenece a $U$, es mínimo de lo medido; con $U = \varnothing$ devuelve $n$ |
+| `medir(r)(f)` | Mediana de $r$ muestras | $t_{(\lfloor r/2 \rfloor + 1)}$. Robusta a valores atípicos (requiere $r \ge 1$). |
+| `aceleracion(T_s, T_p)` | $T_s / T_p$ | $S > 1 \iff$ el paralelo gana. Cota teórica: $S_{\text{modelo}} < p$. |
+| `umbralConveniente(s, dt, U)` | $\arg\min_{u \in U} \tau(u)$ | Pertenece a $U$ y minimiza lo medido. Si $U = \varnothing$, devuelve $n$ (fuerza ejecución secuencial). |
