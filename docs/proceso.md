@@ -588,3 +588,193 @@ graph TD
     C --> D["3: hoja<br/>costo 3"]
     C --> E["3: hoja<br/>costo 3"]
 ```
+## Punto 5: medición, aceleración y umbral conveniente
+
+Las tres funciones del punto 5 no simulan nada: miden cuánto tarda el código de
+los puntos anteriores y comparan resultados. `medir` cronometra, `aceleracion`
+compara dos tiempos y `umbralConveniente` usa `medir` para escoger el umbral
+que menos tarda. Los tiempos de los ejemplos de este informe son ilustrativos,
+no mediciones de la máquina.
+
+### 5.1 `medir`
+
+```scala
+/** Mediana de varias mediciones de ScalaMeter, en milisegundos. */
+def medir[A](repeticiones: Int)(cuerpo: => A): Double = {
+  val muestras = Vector.fill(repeticiones) {
+    (withWarmer(new Warmer.Default) measure { cuerpo }).value
+  }
+  muestras.sorted.apply(muestras.length / 2)
+}
+```
+
+Ejecución paso a paso:
+
+1. `Vector.fill(repeticiones) { ... }` evalúa su bloque `repeticiones` veces y
+   guarda cada resultado en un vector.
+2. En cada repetición, `withWarmer(new Warmer.Default)` ejecuta `cuerpo` varias
+   veces antes de medir, para que la JVM compile y optimice el código.
+3. Después, `measure { cuerpo }` mide el tiempo de una ejecución, y `.value` toma
+   ese tiempo como `Double`, en milisegundos. Esa cifra es una muestra.
+4. `cuerpo: => A` es un parámetro por nombre: se reevalúa en cada muestra y en
+   cada repetición del calentador, en lugar de ejecutarse una sola vez.
+5. `muestras.sorted` ordena las muestras de menor a mayor.
+6. `apply(muestras.length / 2)` toma el elemento del medio. La división es
+   entera, así que con una cantidad impar de muestras es la mediana exacta, y
+   con una cantidad par es la mediana superior.
+
+Ejemplo con `repeticiones = 5`, donde una muestra salió muy alta por una pausa
+del recolector de basura:
+
+```text
+medir(5) { pasoParalelo(s, 0.5, 1024) }
+  muestras         = Vector(10.2, 9.8, 95.0, 10.1, 10.4)
+  sorted           = Vector(9.8, 10.1, 10.2, 10.4, 95.0)
+  length / 2       = 5 / 2 = 2
+  apply(2)         = 10.2
+  resultado: 10.2
+```
+
+El promedio de esas mismas muestras sería
+$(10{,}2 + 9{,}8 + 95{,}0 + 10{,}1 + 10{,}4) / 5 = 27{,}1$, un valor que ninguna
+corrida tuvo. La mediana ignora el valor atípico y se queda con 10,2.
+
+Con una cantidad par, `repeticiones = 4`:
+
+```text
+muestras   = Vector(8.0, 6.0, 7.0, 9.0)
+sorted     = Vector(6.0, 7.0, 8.0, 9.0)
+length / 2 = 4 / 2 = 2
+apply(2)   = 8.0
+resultado: 8.0   (la mediana superior; la inferior sería 7.0)
+```
+
+Con `repeticiones = 0` el vector queda vacío y `apply(0)` lanza una excepción,
+porque no hay mediana de una muestra vacía. La función necesita al menos una
+repetición.
+
+```mermaid
+flowchart LR
+    A["Vector.fill(r)"] --> B["calentador: cuerpo varias veces"]
+    B --> C["measure: una muestra en ms"]
+    C --> D["muestras: r valores"]
+    D --> E["sorted: orden ascendente"]
+    E --> F["apply(r / 2): la mediana"]
+```
+
+### 5.2 `aceleracion`
+
+```scala
+/** El cociente entre el tiempo secuencial y el paralelo. */
+def aceleracion(tSecuencial: Double, tParalelo: Double): Double =
+  tSecuencial / tParalelo
+```
+
+Paso a paso: divide el tiempo de la versión secuencial entre el de la paralela.
+Un resultado mayor que 1 significa que la paralela tardó menos.
+
+| tSecuencial | tParalelo | aceleración | lectura |
+|---:|---:|---:|---|
+| 12.0 | 3.0 | 4.0 | la paralela es 4 veces más rápida |
+| 12.0 | 12.0 | 1.0 | no hay ganancia |
+| 12.0 | 24.0 | 0.5 | la paralela es el doble de lenta |
+
+Ejemplo de uso, con los dos tiempos medidos por separado:
+
+```text
+tSecuencial = medir(5) { pasoSecuencial(s, 0.5) }          = 12.0
+tParalelo   = medir(5) { pasoParalelo(s, 0.5, 78125) }     = 3.0
+aceleracion(12.0, 3.0) = 12.0 / 3.0 = 4.0
+```
+
+Si `tParalelo` fuera 0, la división en `Double` daría `Infinity`. Con cargas
+reales las muestras son positivas, así que ese caso no se espera.
+
+### 5.3 `umbralConveniente`
+
+```scala
+/**
+ * El umbral que menos tarda de una lista de candidatos. Con la lista vacía,
+ * el tamaño del sistema, que equivale a no repartir.
+ */
+def umbralConveniente(s: Sistema, dt: Double, umbrales: List[Int]): Int =
+  if (umbrales.isEmpty) s.length
+  else umbrales.minBy(u => medir(5) {
+    pasoParalelo(s, dt, u)
+  })
+```
+
+Ejecución paso a paso:
+
+1. Si la lista de candidatos está vacía, devuelve `s.length`. No hay nada que
+   comparar, y un umbral igual al tamaño del sistema no reparte: `pasoParalelo`
+   queda como una sola hoja, equivalente a la versión secuencial.
+2. Si no, `minBy` recorre la lista y calcula, **una vez por candidato**,
+   `medir(5) { pasoParalelo(s, dt, u) }`: la mediana de 5 muestras con ese umbral.
+3. `minBy` se queda con el candidato de menor tiempo. Si hay empate, gana el
+   primero de la lista, porque solo reemplaza ante un valor estrictamente menor.
+4. Devuelve el umbral, no el tiempo.
+
+Ejemplo con tres candidatos:
+
+```text
+umbralConveniente(s, 0.5, List(100000, 10000, 1000))
+  u = 100000 -> medir(5) { pasoParalelo(s, 0.5, 100000) } = 2.1
+  u = 10000  -> medir(5) { pasoParalelo(s, 0.5, 10000)  } = 1.6   <- menor
+  u = 1000   -> medir(5) { pasoParalelo(s, 0.5, 1000)   } = 1.8
+  resultado: 10000
+```
+
+Ejemplo de empate:
+
+```text
+umbralConveniente(s, 0.5, List(8, 4))
+  u = 8 -> 2.0
+  u = 4 -> 2.0
+  empate: gana el primero
+  resultado: 8
+```
+
+Ejemplo con la lista vacía y `n = 4`:
+
+```text
+umbralConveniente(s, 0.5, Nil)
+  umbrales.isEmpty -> s.length = 4
+  resultado: 4   (pasoParalelo(s, 0.5, 4) no crea ninguna tarea)
+```
+
+```mermaid
+flowchart TD
+    A["umbralConveniente(s, dt, umbrales)"] --> B{"umbrales vacía"}
+    B -->|sí| C["devuelve s.length: no se reparte"]
+    B -->|no| D["para cada u: medir(5) de pasoParalelo(s, dt, u)"]
+    D --> E["minBy: el u de menor mediana"]
+    E --> F["devuelve ese u"]
+```
+
+El umbral escogido cambia el tiempo, pero nunca el resultado: todos los
+umbrales devuelven el mismo arreglo, como se muestra en el punto 1.
+
+### 5.4 Cómo se usan las tres funciones juntas
+
+El informe de resultados sigue estos pasos:
+
+1. Mide la versión secuencial: `tSecuencial = medir(5) { pasoSecuencial(s, dt) }`.
+2. Para cada umbral de interés, mide la paralela:
+   `tParalelo = medir(5) { pasoParalelo(s, dt, u) }`.
+3. Calcula `aceleracion(tSecuencial, tParalelo)` para cada umbral.
+4. Llama a `umbralConveniente` con esa lista de umbrales para escoger el mejor.
+
+Como caso de control, el umbral igual al tamaño del sistema no reparte nada, y
+la aceleración debe dar cerca de 1. Si da mucho más o mucho menos, el ruido de
+la medición es grande y los demás resultados deben leerse con cuidado.
+
+### 5.5 Resumen del flujo de datos
+
+- `medir` repite la medición, ordena las muestras y devuelve la del medio, por
+  lo que un valor atípico no la mueve.
+- `aceleracion` es un cociente de dos tiempos: mayor que 1 si gana la paralela.
+- `umbralConveniente` mide cada candidato con `medir(5)` y devuelve el de menor
+  tiempo, o el tamaño del sistema si no hay candidatos.
+- El resultado de `pasoParalelo` no cambia con el umbral; el informe de
+  corrección argumenta por qué.
